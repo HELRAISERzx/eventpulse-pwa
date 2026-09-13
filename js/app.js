@@ -69,6 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const onNodeClick = (node, clientX, clientY) => {
     popoverSelectedNode = node;
 
+    // If clicking a destination node (POI), immediately calculate and display route!
+    if (!node.isAnchor) {
+      activeTargetNode = node;
+      calculateAndDisplayRoute(node.id);
+    }
+
     // Position interactive context popover on the map canvas
     if (popover && clientX !== undefined && clientY !== undefined) {
       const rect = canvas.getBoundingClientRect();
@@ -77,6 +83,11 @@ document.addEventListener('DOMContentLoaded', () => {
       popover.style.left = `${popX}px`;
       popover.style.top = `${popY}px`;
       popoverTitle.textContent = node.isAnchor ? `📍 Pillar ${node.anchorCode}` : `${node.icon || '📍'} ${node.label}`;
+      if (btnPopoverNavigate) {
+        btnPopoverNavigate.textContent = '🧭 Navigating Active';
+        btnPopoverNavigate.style.background = '#0284c7';
+        btnPopoverNavigate.style.color = '#fff';
+      }
       popover.classList.remove('hidden');
       return;
     }

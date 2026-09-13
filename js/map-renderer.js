@@ -211,19 +211,50 @@ class VenueMapRenderer {
     const clickX = (clientX - rect.left - this.panX) / this.scale;
     const clickY = (clientY - rect.top - this.panY) / this.scale;
 
-    // 1. Check nodes first (POI or Anchor)
+    // 1. Check nodes first (POI or Anchor) with generous hit radius
+    let closestNode = null;
+    let closestDist = Infinity;
+
     for (const [id, node] of Object.entries(this.data.nodes)) {
       const dist = Math.hypot(clickX - node.x, clickY - node.y);
-      const hitRadius = node.isAnchor ? 20 : 26;
-      if (dist <= hitRadius) {
-        if (this.onNodeClick) {
-          this.onNodeClick(node, clientX, clientY);
-        }
-        return;
+      const hitRadius = node.isAnchor ? 28 : 34; // Generous hit radius for both touch and desktop clicks
+      if (dist <= hitRadius && dist < closestDist) {
+        closestDist = dist;
+        closestNode = node;
       }
     }
 
-    // 2. Check Corridors / Edges (Organizers can click directly to toggle roadblocks)
+    if (closestNode) {
+      if (this.onNodeClick) {
+        this.onNodeClick(closestNode, clientX, clientY);
+      }
+      return;
+    }
+
+    // 2. Fallback: Check if clicked inside an architectural Room / Zone
+    if (this.data.zones) {
+      const zoneNodeMap = {
+        'zone_keynote': 'main_keynote',
+        'zone_expo': 'main_stage2',
+        'zone_food': 'food_coffee',
+        'zone_workshops': 'ws_room_a',
+        'zone_lounge': 'buff_quiet',
+        'zone_services': 'restroom_main'
+      };
+
+      for (const z of this.data.zones) {
+        if (clickX >= z.x && clickX <= z.x + z.w && clickY >= z.y && clickY <= z.y + z.h) {
+          const targetNodeId = zoneNodeMap[z.id];
+          const targetNode = targetNodeId && this.data.nodes[targetNodeId];
+          if (targetNode && this.onNodeClick) {
+            this.onNodeClick(targetNode, clientX, clientY);
+            return;
+          }
+        }
+      }
+    }
+
+    // 3. Check Corridors / Edges (Organizers can click directly to toggle roadblocks)
     if (this.onCorridorClick || this.isOrganizerMode) {
       for (const edge of this.data.edges) {
         const n1 = this.data.nodes[edge.from];
