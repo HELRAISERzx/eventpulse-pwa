@@ -706,8 +706,8 @@ document.addEventListener('DOMContentLoaded', () => {
     organizer: document.getElementById('tabOrganizer')
   };
 
-  let isOrganizerAuthorized = true; // Unlocked by default so Organizer Mode opens directly without obstacles
-  const VALID_ORGANIZER_CODES = ['EVENT2026', '7700', 'ADMIN', 'OP2026', '1234', 'ORGANIZER', 'OPS', 'DEMO', 'PASSWORD', 'PASSCODE'];
+  let isOrganizerAuthorized = false; // Protected with passcode authorization
+  const VALID_ORGANIZER_CODES = ['7700', 'EVENT2026', 'ADMIN', 'OP2026', '1234', 'ORGANIZER'];
 
   const modalOrganizerAuth = document.getElementById('modalOrganizerAuth');
   const organizerPasscodeInput = document.getElementById('organizerPasscodeInput');
@@ -1133,15 +1133,41 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   function validateAndUnlockOrganizer() {
-    isOrganizerAuthorized = true;
-    if (authErrorMsg) authErrorMsg.classList.add('hidden');
-    if (modalOrganizerAuth) modalOrganizerAuth.classList.add('hidden');
-    if (organizerPasscodeInput) {
+    if (!organizerPasscodeInput) return;
+    const entered = organizerPasscodeInput.value.trim().toUpperCase();
+
+    // Guard: Prevent "Invalid code / Access denied" error when user has not entered anything
+    if (!entered) {
+      if (authErrorMsg) {
+        authErrorMsg.textContent = '⚠️ Please enter the passcode (7700 or EVENT2026) or click below.';
+        authErrorMsg.className = 'text-2xs text-amber-400 font-bold mt-1';
+        authErrorMsg.classList.remove('hidden');
+      }
+      organizerPasscodeInput.style.borderColor = '#f59e0b';
+      setTimeout(() => { organizerPasscodeInput.style.borderColor = ''; }, 1500);
+      organizerPasscodeInput.focus();
+      return;
+    }
+
+    if (VALID_ORGANIZER_CODES.includes(entered)) {
+      isOrganizerAuthorized = true;
+      if (authErrorMsg) authErrorMsg.classList.add('hidden');
+      if (modalOrganizerAuth) modalOrganizerAuth.classList.add('hidden');
       organizerPasscodeInput.value = '';
       organizerPasscodeInput.style.borderColor = '';
+      switchToOrganizerView();
+      showTicker('🔓 Organizer Command Center Unlocked. Welcome, Coordinator.');
+      alerts.playChirp(880, 0.15);
+    } else {
+      if (authErrorMsg) {
+        authErrorMsg.textContent = '❌ Invalid passcode. Enter 7700 or EVENT2026.';
+        authErrorMsg.className = 'text-2xs text-rose-400 font-bold mt-1';
+        authErrorMsg.classList.remove('hidden');
+      }
+      alerts.triggerEmergencyAlert('Access Denied');
+      organizerPasscodeInput.style.borderColor = '#f43f5e';
+      setTimeout(() => { organizerPasscodeInput.style.borderColor = ''; }, 1500);
     }
-    switchToOrganizerView();
-    showTicker('🔓 Organizer Command Center Unlocked. Welcome, Coordinator.');
   }
 
   if (btnSubmitOrganizerAuth) {
