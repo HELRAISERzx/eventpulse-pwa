@@ -809,33 +809,249 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnHeaderLaunchMap) btnHeaderLaunchMap.addEventListener('click', () => switchView('map'));
 
   // Introductory Landing Page CTA Buttons
+  const btnHomeLaunchAttendee = document.getElementById('btnHomeLaunchAttendee');
+  if (btnHomeLaunchAttendee) btnHomeLaunchAttendee.addEventListener('click', () => switchView('map'));
+
+  const btnHomeLaunchOrganizer = document.getElementById('btnHomeLaunchOrganizer');
+  if (btnHomeLaunchOrganizer) btnHomeLaunchOrganizer.addEventListener('click', () => switchView('organizer'));
+
   const btnLandingLaunchMap = document.getElementById('btnLandingLaunchMap');
   if (btnLandingLaunchMap) btnLandingLaunchMap.addEventListener('click', () => switchView('map'));
 
-  const btnLandingStepFree = document.getElementById('btnLandingStepFree');
-  if (btnLandingStepFree) {
-    btnLandingStepFree.addEventListener('click', () => {
+  const btnLandingBottomLaunch = document.getElementById('btnLandingBottomLaunch');
+  if (btnLandingBottomLaunch) btnLandingBottomLaunch.addEventListener('click', () => switchView('map'));
+
+  const btnLandingOrganizer = document.getElementById('btnLandingOrganizer');
+  if (btnLandingOrganizer) btnLandingOrganizer.addEventListener('click', () => switchView('organizer'));
+
+  // 15-Second Automated Guided Tour Mode
+  let tourActive = false;
+  let tourTimer = null;
+  const btnHomeStartTour = document.getElementById('btnHomeStartTour');
+
+  function startGuidedTour() {
+    tourActive = true;
+    switchView('map');
+
+    alerts.triggerGlanceCard('🎬 Guided Tour (1/4)', 'Orienting to attendee position at Food Plaza (Pillar B4)...', 'emerald');
+    anchorEngine.locateByCode('B4');
+
+    tourTimer = setTimeout(() => {
+      if (!tourActive) return;
+      alerts.triggerGlanceCard('🎬 Guided Tour (2/4)', 'Solving Step-Free route to Main Keynote Hall (Stairs Avoided)...', 'emerald');
       isWheelchairMode = true;
       renderer.isWheelchairMode = true;
       const btnAcc = document.getElementById('btnToggleAccessibility');
       const accLabel = document.getElementById('accessibilityLabel');
       if (btnAcc) btnAcc.classList.add('active');
       if (accLabel) accLabel.textContent = 'Step-Free: ON ♿';
-      switchView('map');
-      alerts.triggerGlanceCard('♿ Step-Free Mode Activated', 'Navigating exclusively via elevators and flat corridors.', 'emerald');
-    });
+      calculateAndDisplayRoute('main_keynote');
+
+      tourTimer = setTimeout(() => {
+        if (!tourActive) return;
+        alerts.triggerGlanceCard('🎬 Guided Tour (3/4)', 'Simulating Choke Point — Virtual Roadblock Deployed on Galleria!', 'amber');
+        organizer.toggleCorridorBarrier('edge_b1_b3');
+        calculateAndDisplayRoute('main_keynote');
+
+        tourTimer = setTimeout(() => {
+          if (!tourActive) return;
+          alerts.triggerGlanceCard('🎉 Tour Complete!', 'You are all set. Tap any room to navigate, scan QR codes, or test Flock Mode.', 'emerald');
+          tourActive = false;
+        }, 4500);
+
+      }, 4500);
+
+    }, 3500);
   }
 
-  const btnLandingAiGuide = document.getElementById('btnLandingAiGuide');
-  if (btnLandingAiGuide) {
-    btnLandingAiGuide.addEventListener('click', () => {
-      openAssistantModal();
-    });
+  if (btnHomeStartTour) {
+    btnHomeStartTour.addEventListener('click', startGuidedTour);
   }
 
-  const btnLandingOrganizer = document.getElementById('btnLandingOrganizer');
-  if (btnLandingOrganizer) {
-    btnLandingOrganizer.addEventListener('click', () => switchView('organizer'));
+  // Interactive Mini-Demo Preview Component
+  const miniCanvas = document.getElementById('miniDemoCanvas');
+  if (miniCanvas) {
+    const miniCtx = miniCanvas.getContext('2d');
+    let miniStepFree = true;
+    let miniBlocked = false;
+    let miniDashOffset = 0;
+
+    const btnMiniStepFree = document.getElementById('btnMiniToggleStepFree');
+    const btnMiniBlock = document.getElementById('btnMiniToggleBlock');
+    const btnMiniFull = document.getElementById('btnMiniLaunchFull');
+    const statusText = document.getElementById('miniDemoStatusText');
+    const metricDist = document.getElementById('miniMetricDist');
+    const metricStairs = document.getElementById('miniMetricStairs');
+    const metricTime = document.getElementById('miniMetricTime');
+    const metricStatus = document.getElementById('miniMetricStatus');
+
+    function updateMiniMetrics(path) {
+      if (!path) {
+        if (metricDist) metricDist.textContent = 'No Path';
+        if (metricStatus) metricStatus.textContent = 'Blocked';
+        return;
+      }
+      if (metricDist) metricDist.textContent = `${path.distance}m`;
+      if (metricTime) metricTime.textContent = `~${Math.ceil(path.estimatedSeconds / 60)} min`;
+      if (metricStairs) metricStairs.textContent = miniStepFree ? '♿ Step-Free Safe' : '⚠️ Stairs Included';
+      if (metricStatus) {
+        metricStatus.textContent = miniBlocked ? '🔄 Detour Active' : 'Nominal Flow';
+        metricStatus.className = `metric-val ${miniBlocked ? 'text-amber-400' : 'text-emerald-400'}`;
+      }
+      if (statusText) {
+        statusText.textContent = miniBlocked
+          ? 'Detour Active: B4 ➔ B3 ➔ C3 ➔ C2 ➔ Keynote Hall (Stairs & Bottleneck Avoided)'
+          : 'Active Path: Food Plaza (B4) ➔ Keynote Hall (A2)';
+      }
+    }
+
+    if (btnMiniStepFree) {
+      btnMiniStepFree.addEventListener('click', () => {
+        miniStepFree = !miniStepFree;
+        btnMiniStepFree.classList.toggle('active', miniStepFree);
+        btnMiniStepFree.textContent = miniStepFree ? '♿ Step-Free: ON' : '♿ Step-Free: OFF';
+      });
+    }
+
+    if (btnMiniBlock) {
+      btnMiniBlock.addEventListener('click', () => {
+        miniBlocked = !miniBlocked;
+        btnMiniBlock.classList.toggle('active', miniBlocked);
+        btnMiniBlock.textContent = miniBlocked ? '🚧 Clear Roadblock' : '🚧 Toggle Roadblock';
+      });
+    }
+
+    if (btnMiniFull) {
+      btnMiniFull.addEventListener('click', () => switchView('map'));
+    }
+
+    function renderMiniDemo() {
+      if (document.hidden || !miniCanvas.offsetParent) {
+        requestAnimationFrame(renderMiniDemo);
+        return;
+      }
+
+      miniDashOffset -= 1;
+      const w = miniCanvas.width;
+      const h = miniCanvas.height;
+
+      miniCtx.fillStyle = '#050b14';
+      miniCtx.fillRect(0, 0, w, h);
+
+      const scaleX = (w - 70) / 1000;
+      const scaleY = (h - 50) / 600;
+      const tx = 35;
+      const ty = 25;
+
+      const project = (x, y) => ({
+        x: tx + (x - 100) * scaleX,
+        y: ty + (y - 100) * scaleY
+      });
+
+      // 1. Draw mini zones
+      VENUE_DATA.zones.forEach((z) => {
+        const p = project(z.x, z.y);
+        const pw = z.w * scaleX;
+        const ph = z.h * scaleY;
+
+        miniCtx.fillStyle = 'rgba(30, 41, 59, 0.4)';
+        miniCtx.beginPath();
+        miniCtx.roundRect(p.x, p.y, pw, ph, 6);
+        miniCtx.fill();
+        miniCtx.strokeStyle = 'rgba(51, 65, 85, 0.6)';
+        miniCtx.lineWidth = 1;
+        miniCtx.stroke();
+
+        miniCtx.fillStyle = '#94a3b8';
+        miniCtx.font = '8px system-ui';
+        miniCtx.fillText(z.name, p.x + 6, p.y + 11);
+      });
+
+      // 2. Draw corridors
+      const blockedEdges = miniBlocked ? new Set(['edge_b1_b3', 'edge_a1_b1']) : new Set();
+      VENUE_DATA.edges.forEach((edge) => {
+        const n1 = VENUE_DATA.nodes[edge.from];
+        const n2 = VENUE_DATA.nodes[edge.to];
+        if (!n1 || !n2) return;
+
+        const p1 = project(n1.x, n1.y);
+        const p2 = project(n2.x, n2.y);
+        const isB = blockedEdges.has(edge.id);
+
+        miniCtx.beginPath();
+        miniCtx.moveTo(p1.x, p1.y);
+        miniCtx.lineTo(p2.x, p2.y);
+        miniCtx.strokeStyle = isB ? 'rgba(244, 63, 94, 0.3)' : 'rgba(51, 65, 85, 0.5)';
+        miniCtx.lineWidth = isB ? 8 : 6;
+        miniCtx.stroke();
+
+        if (isB) {
+          const midX = (p1.x + p2.x) / 2;
+          const midY = (p1.y + p2.y) / 2;
+          miniCtx.fillStyle = '#f43f5e';
+          miniCtx.beginPath();
+          miniCtx.arc(midX, midY, 6, 0, Math.PI * 2);
+          miniCtx.fill();
+        }
+      });
+
+      // 3. Solve Path
+      const route = pathfinder.findPath('n_b4', 'main_keynote', miniStepFree, blockedEdges);
+      updateMiniMetrics(route);
+
+      if (route && route.path.length >= 2) {
+        const pathPoints = route.path.map((id) => {
+          const n = VENUE_DATA.nodes[id];
+          return n ? project(n.x, n.y) : null;
+        }).filter(Boolean);
+
+        // Glow ribbon
+        miniCtx.beginPath();
+        miniCtx.moveTo(pathPoints[0].x, pathPoints[0].y);
+        for (let i = 1; i < pathPoints.length; i++) {
+          miniCtx.lineTo(pathPoints[i].x, pathPoints[i].y);
+        }
+        miniCtx.strokeStyle = miniStepFree ? 'rgba(34, 197, 94, 0.3)' : 'rgba(56, 189, 248, 0.3)';
+        miniCtx.lineWidth = 10;
+        miniCtx.stroke();
+
+        // Main line
+        miniCtx.strokeStyle = miniStepFree ? '#22c55e' : '#38bdf8';
+        miniCtx.lineWidth = 3;
+        miniCtx.stroke();
+
+        // Animated dots
+        miniCtx.setLineDash([6, 6]);
+        miniCtx.lineDashOffset = miniDashOffset;
+        miniCtx.strokeStyle = '#ffffff';
+        miniCtx.lineWidth = 2;
+        miniCtx.stroke();
+        miniCtx.setLineDash([]);
+      }
+
+      // 4. Draw start & destination pins
+      const startP = project(VENUE_DATA.nodes['n_b4'].x, VENUE_DATA.nodes['n_b4'].y);
+      miniCtx.fillStyle = '#0284c7';
+      miniCtx.beginPath();
+      miniCtx.arc(startP.x, startP.y, 6, 0, Math.PI * 2);
+      miniCtx.fill();
+      miniCtx.strokeStyle = '#fff';
+      miniCtx.lineWidth = 1.5;
+      miniCtx.stroke();
+
+      const endP = project(VENUE_DATA.nodes['main_keynote'].x, VENUE_DATA.nodes['main_keynote'].y);
+      miniCtx.fillStyle = '#f43f5e';
+      miniCtx.beginPath();
+      miniCtx.arc(endP.x, endP.y, 6, 0, Math.PI * 2);
+      miniCtx.fill();
+      miniCtx.strokeStyle = '#fff';
+      miniCtx.lineWidth = 1.5;
+      miniCtx.stroke();
+
+      requestAnimationFrame(renderMiniDemo);
+    }
+
+    requestAnimationFrame(renderMiniDemo);
   }
 
   // Deep-link Action Triggers ([data-jump])
