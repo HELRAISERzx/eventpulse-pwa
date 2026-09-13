@@ -81,9 +81,14 @@ class VenueMapRenderer {
       });
     }, { passive: true });
 
+    let downX = 0;
+    let downY = 0;
+
     // Mouse drag
     this.canvas.addEventListener('mousedown', (e) => {
       isDragging = true;
+      downX = e.clientX;
+      downY = e.clientY;
       startX = e.clientX - this.panX;
       startY = e.clientY - this.panY;
     });
@@ -95,10 +100,38 @@ class VenueMapRenderer {
       this.requestRender();
     }, { passive: true });
 
+    this.canvas.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        this.canvas.style.cursor = 'grabbing';
+        return;
+      }
+      const rect = this.canvas.getBoundingClientRect();
+      const mouseX = (e.clientX - rect.left - this.panX) / this.scale;
+      const mouseY = (e.clientY - rect.top - this.panY) / this.scale;
+
+      let isOverClickable = false;
+      for (const [id, node] of Object.entries(this.data.nodes)) {
+        const hitRadius = node.isAnchor ? 28 : 34;
+        if (Math.hypot(mouseX - node.x, mouseY - node.y) <= hitRadius) {
+          isOverClickable = true;
+          break;
+        }
+      }
+      if (!isOverClickable && this.data.zones) {
+        for (const z of this.data.zones) {
+          if (mouseX >= z.x && mouseX <= z.x + z.w && mouseY >= z.y && mouseY <= z.y + z.h) {
+            isOverClickable = true;
+            break;
+          }
+        }
+      }
+      this.canvas.style.cursor = isOverClickable ? 'pointer' : 'grab';
+    }, { passive: true });
+
     window.addEventListener('mouseup', (e) => {
       if (isDragging) {
-        const dist = Math.hypot(e.clientX - startX - this.panX, e.clientY - startY - this.panY);
-        if (dist < 5) {
+        const moveDist = Math.hypot(e.clientX - downX, e.clientY - downY);
+        if (moveDist < 10) {
           this.handlePointerClick(e.clientX, e.clientY);
         }
       }
@@ -116,6 +149,8 @@ class VenueMapRenderer {
     this.canvas.addEventListener('touchstart', (e) => {
       if (e.touches.length === 1) {
         isDragging = true;
+        downX = e.touches[0].clientX;
+        downY = e.touches[0].clientY;
         startX = e.touches[0].clientX - this.panX;
         startY = e.touches[0].clientY - this.panY;
       } else if (e.touches.length === 2) {
@@ -150,8 +185,8 @@ class VenueMapRenderer {
     this.canvas.addEventListener('touchend', (e) => {
       if (isDragging && e.changedTouches.length === 1) {
         const touch = e.changedTouches[0];
-        const dist = Math.hypot(touch.clientX - startX - this.panX, touch.clientY - startY - this.panY);
-        if (dist < 8) {
+        const moveDist = Math.hypot(touch.clientX - downX, touch.clientY - downY);
+        if (moveDist < 12) {
           this.handlePointerClick(touch.clientX, touch.clientY);
         }
       }
@@ -244,10 +279,23 @@ class VenueMapRenderer {
 
       for (const z of this.data.zones) {
         if (clickX >= z.x && clickX <= z.x + z.w && clickY >= z.y && clickY <= z.y + z.h) {
-          const targetNodeId = zoneNodeMap[z.id];
-          const targetNode = targetNodeId && this.data.nodes[targetNodeId];
-          if (targetNode && this.onNodeClick) {
-            this.onNodeClick(targetNode, clientX, clientY);
+          let bestNode = null;
+          let bestDist = Infinity;
+          for (const [id, node] of Object.entries(this.data.nodes)) {
+            if (node.isAnchor) continue;
+            if (node.x >= z.x - 20 && node.x <= z.x + z.w + 20 && node.y >= z.y - 20 && node.y <= z.y + z.h + 20) {
+              const d = Math.hypot(clickX - node.x, clickY - node.y);
+              if (d < bestDist) {
+                bestDist = d;
+                bestNode = node;
+              }
+            }
+          }
+          if (!bestNode && zoneNodeMap[z.id]) {
+            bestNode = this.data.nodes[zoneNodeMap[z.id]];
+          }
+          if (bestNode && this.onNodeClick) {
+            this.onNodeClick(bestNode, clientX, clientY);
             return;
           }
         }
@@ -737,32 +785,24 @@ class VenueMapRenderer {
         continue;
       }
 
-      // Detailed Stalls: Food, Merch, Services
-      if (!isDetailedZoom) {
-        // Zoomed Out: Clean dot indicator
-        ctx.fillStyle = node.cat === 'food' ? '#f59e0b' : node.cat === 'merch' ? '#a855f7' : '#64748b';
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, 5, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        // Zoomed In: Full vibrant pictogram and label
-        ctx.fillStyle = '#1e293b';
-        ctx.strokeStyle = node.cat === 'food' ? '#f59e0b' : node.cat === 'merch' ? '#a855f7' : '#94a3b8';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, 15, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+      // All Stalls & POIs (Food, Merch, Services, Lounges)
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = node.cat === 'food' ? '#f59e0b' : node.cat === 'merch' ? '#a855f7' : '#38bdf8';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
 
-        ctx.font = '13px system-ui';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(node.icon, node.x, node.y);
+      ctx.font = '12px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(node.icon || '📍', node.x, node.y);
 
-        ctx.fillStyle = '#e2e8f0';
-        ctx.font = '600 10px system-ui';
-        ctx.fillText(node.label, node.x, node.y + 22);
-      }
+      // Label always shown with clean readability
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = 'bold 9.5px system-ui';
+      ctx.fillText(node.label, node.x, node.y + 19);
     }
 
     ctx.globalAlpha = 1.0;
@@ -818,7 +858,8 @@ class VenueMapRenderer {
       ctx.fillStyle = '#38bdf8';
       ctx.font = 'bold 10px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText('YOU (Pillar B4)', userNode.x, userNode.y - 18);
+      const userLabel = userNode.anchorCode ? `YOU (Pillar ${userNode.anchorCode})` : 'YOU';
+      ctx.fillText(userLabel, userNode.x, userNode.y - 18);
 
       // 7. Accessibility Route Badge (visible only in wheelchair mode)
       if (this.isWheelchairMode) {

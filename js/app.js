@@ -65,54 +65,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Map click handler (interactive popover or node details modal)
+  // Map click handler (instant route calculation on destination click)
   const onNodeClick = (node, clientX, clientY) => {
-    popoverSelectedNode = node;
-
-    // If clicking a destination node (POI), immediately calculate and display route!
-    if (!node.isAnchor) {
-      activeTargetNode = node;
-      calculateAndDisplayRoute(node.id);
-    }
-
-    // Position interactive context popover on the map canvas
-    if (popover && clientX !== undefined && clientY !== undefined) {
-      const rect = canvas.getBoundingClientRect();
-      const popX = Math.max(90, Math.min(rect.width - 90, clientX - rect.left));
-      const popY = Math.max(50, clientY - rect.top);
-      popover.style.left = `${popX}px`;
-      popover.style.top = `${popY}px`;
-      popoverTitle.textContent = node.isAnchor ? `📍 Pillar ${node.anchorCode}` : `${node.icon || '📍'} ${node.label}`;
-      if (btnPopoverNavigate) {
-        btnPopoverNavigate.textContent = '🧭 Navigating Active';
-        btnPopoverNavigate.style.background = '#0284c7';
-        btnPopoverNavigate.style.color = '#fff';
-      }
-      popover.classList.remove('hidden');
-      return;
-    }
+    hidePopover();
 
     if (node.isAnchor) {
       anchorEngine.locateByCode(node.anchorCode);
+      alerts.playChirp(880, 0.15);
+      alerts.triggerGlanceCard('📍 Position Updated', `Your location is now set to Pillar ${node.anchorCode}`, 'sky');
       return;
     }
 
-    const modal = document.getElementById('modalNodeInfo');
-    const title = document.getElementById('nodeInfoTitle');
-    const cat = document.getElementById('nodeInfoCategory');
-    const acc = document.getElementById('nodeInfoAccessibility');
-    const desc = document.getElementById('nodeInfoDesc');
-    const timing = document.getElementById('nodeInfoTiming');
-
-    title.textContent = `${node.icon} ${node.label}`;
-    cat.textContent = node.cat.replace('_', ' ').toUpperCase();
-    acc.textContent = node.stairsRequired ? '⚠️ Stairs Required' : '♿ Step-Free';
-    acc.className = `badge-sm ${node.stairsRequired ? 'text-amber-400' : 'text-emerald-400'}`;
-    desc.textContent = node.desc || 'No additional details available.';
-    timing.textContent = node.time ? `Scheduled: ${node.time}` : 'Open all day';
-
+    // Immediate destination routing
     activeTargetNode = node;
-    modal.classList.remove('hidden');
+    calculateAndDisplayRoute(node.id);
+    alerts.playChirp(600, 0.12);
   };
 
   const renderer = new VenueMapRenderer(canvas, VENUE_DATA, onNodeClick);
@@ -708,6 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     renderer.activeRoute = route.path;
+    renderer.requestRender();
     banner.classList.remove('hidden');
     const firstInstruction = route.instructions[0] || 'Proceed to destination';
     instructionEl.textContent = isWheelchairMode
@@ -784,10 +752,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (targetKey === 'map') {
       renderer.isOrganizerMode = false;
+      renderer.initCanvasSize();
+      renderer.render();
       setTimeout(() => {
         renderer.initCanvasSize();
         renderer.render();
-      }, 50);
+      }, 60);
+      setTimeout(() => {
+        renderer.initCanvasSize();
+        renderer.render();
+      }, 200);
     } else if (targetKey === 'organizer') {
       renderer.isOrganizerMode = true;
       renderer.render();
@@ -891,41 +865,24 @@ document.addEventListener('DOMContentLoaded', () => {
     let miniStepFree = true;
     let miniBlocked = false;
     let miniDashOffset = 0;
+    let currentMiniRoute = null;
 
-    const btnMiniStepFree = document.getElementById('btnMiniToggleStepFree');
-    const btnMiniBlock = document.getElementById('btnMiniToggleBlock');
-    const btnMiniFull = document.getElementById('btnMiniLaunchFull');
-    const statusText = document.getElementById('miniDemoStatusText');
-    const metricDist = document.getElementById('miniMetricDist');
-    const metricStairs = document.getElementById('miniMetricStairs');
-    const metricTime = document.getElementById('miniMetricTime');
-    const metricStatus = document.getElementById('miniMetricStatus');
-
-    function updateMiniMetrics(path) {
-      if (!path) {
-        if (metricDist) metricDist.textContent = 'No Path';
-        if (metricStatus) metricStatus.textContent = 'Blocked';
-        return;
-      }
-      if (metricDist) metricDist.textContent = `${path.distance}m`;
-      if (metricTime) metricTime.textContent = `~${Math.ceil(path.estimatedSeconds / 60)} min`;
-      if (metricStairs) metricStairs.textContent = miniStepFree ? '♿ Step-Free Safe' : '⚠️ Stairs Included';
-      if (metricStatus) {
-        metricStatus.textContent = miniBlocked ? '🔄 Detour Active' : 'Nominal Flow';
-        metricStatus.className = `metric-val ${miniBlocked ? 'text-amber-400' : 'text-emerald-400'}`;
-      }
-      if (statusText) {
-        statusText.textContent = miniBlocked
-          ? 'Detour Active: B4 ➔ B3 ➔ C3 ➔ C2 ➔ Keynote Hall (Stairs & Bottleneck Avoided)'
-          : 'Active Path: Food Plaza (B4) ➔ Keynote Hall (A2)';
-      }
+    function recalculateMiniRoute() {
+      const blockedEdges = miniBlocked ? new Set(['edge_b1_b3', 'edge_a1_b1']) : new Set();
+      currentMiniRoute = pathfinder.findPath('n_b4', 'main_keynote', {
+        wheelchairOnly: miniStepFree,
+        blockedEdgeIds: blockedEdges
+      });
+      updateMiniMetrics(currentMiniRoute);
     }
+    recalculateMiniRoute();
 
     if (btnMiniStepFree) {
       btnMiniStepFree.addEventListener('click', () => {
         miniStepFree = !miniStepFree;
         btnMiniStepFree.classList.toggle('active', miniStepFree);
         btnMiniStepFree.textContent = miniStepFree ? '♿ Step-Free: ON' : '♿ Step-Free: OFF';
+        recalculateMiniRoute();
       });
     }
 
@@ -934,6 +891,7 @@ document.addEventListener('DOMContentLoaded', () => {
         miniBlocked = !miniBlocked;
         btnMiniBlock.classList.toggle('active', miniBlocked);
         btnMiniBlock.textContent = miniBlocked ? '🚧 Clear Roadblock' : '🚧 Toggle Roadblock';
+        recalculateMiniRoute();
       });
     }
 
@@ -1011,9 +969,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // 3. Solve Path
-      const route = pathfinder.findPath('n_b4', 'main_keynote', miniStepFree, blockedEdges);
-      updateMiniMetrics(route);
+      // 3. Draw Cached Route
+      const route = currentMiniRoute;
 
       if (route && route.path.length >= 2) {
         const pathPoints = route.path.map((id) => {
@@ -1245,7 +1202,41 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnCancelNav').addEventListener('click', () => {
     renderer.activeRoute = null;
     renderer.targetNodeId = null;
+    renderer.requestRender();
     document.getElementById('navBanner').classList.add('hidden');
+  });
+
+  // Quick Action Floating Chips (Instant One-Click Navigation to Hubs)
+  document.querySelectorAll('.quick-nav-chip').forEach((chip) => {
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const targetType = chip.getAttribute('data-quick');
+      let targetNodeId = null;
+
+      switch (targetType) {
+        case 'elevator':
+          targetNodeId = 'restroom_wheelchair';
+          break;
+        case 'lounge':
+          targetNodeId = 'buff_quiet';
+          break;
+        case 'food':
+          targetNodeId = 'food_coffee';
+          break;
+        case 'restroom':
+          targetNodeId = 'restroom_main';
+          break;
+        case 'evac':
+          targetNodeId = 'n_a1';
+          break;
+      }
+
+      if (targetNodeId && VENUE_DATA.nodes[targetNodeId]) {
+        activeTargetNode = VENUE_DATA.nodes[targetNodeId];
+        calculateAndDisplayRoute(targetNodeId);
+        alerts.playChirp(700, 0.15);
+      }
+    });
   });
 
   // Accessibility Step-Free Toggle
