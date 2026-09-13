@@ -838,11 +838,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnLandingAiGuide = document.getElementById('btnLandingAiGuide');
   if (btnLandingAiGuide) {
     btnLandingAiGuide.addEventListener('click', () => {
-      const drawerCopilot = document.getElementById('drawerCopilot');
-      if (drawerCopilot) {
-        drawerCopilot.classList.remove('hidden');
-        drawerCopilot.classList.add('active');
-      }
+      openAssistantModal();
     });
   }
 
@@ -870,11 +866,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (action === 'ops-reroute') {
         switchView('organizer');
       } else if (action === 'open-gemini') {
-        const drawerCopilot = document.getElementById('drawerCopilot');
-        if (drawerCopilot) {
-          drawerCopilot.classList.remove('hidden');
-          drawerCopilot.classList.add('active');
-        }
+        openAssistantModal();
       } else if (action === 'open-flock') {
         const modalFlock = document.getElementById('modalFlockMode');
         if (modalFlock) {
