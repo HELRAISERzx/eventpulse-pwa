@@ -706,8 +706,8 @@ document.addEventListener('DOMContentLoaded', () => {
     organizer: document.getElementById('tabOrganizer')
   };
 
-  let isOrganizerAuthorized = true; // Unlocked by default so Organizer Mode opens directly without obstacles
-  const VALID_ORGANIZER_CODES = ['EVENT2026', '7700', 'ADMIN', 'OP2026', '1234', 'ORGANIZER', 'OPS', 'DEMO', 'PASSWORD', 'PASSCODE'];
+  let isOrganizerAuthorized = false; // Protected by PIN (PIN: 7700 or EVENT2026)
+  const VALID_ORGANIZER_CODES = ['7700', 'EVENT2026', 'ADMIN', '1234', 'OP2026', '0000', 'ORGANIZER', 'OPS'];
 
   const modalOrganizerAuth = document.getElementById('modalOrganizerAuth');
   const organizerPasscodeInput = document.getElementById('organizerPasscodeInput');
@@ -1133,15 +1133,39 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   function validateAndUnlockOrganizer() {
-    isOrganizerAuthorized = true;
-    if (authErrorMsg) authErrorMsg.classList.add('hidden');
-    if (modalOrganizerAuth) modalOrganizerAuth.classList.add('hidden');
-    if (organizerPasscodeInput) {
+    if (!organizerPasscodeInput) return;
+    const entered = organizerPasscodeInput.value.trim().toUpperCase();
+
+    // Guard: Prompt user to enter PIN if submitted empty
+    if (!entered) {
+      if (authErrorMsg) {
+        authErrorMsg.textContent = '⚠️ Please enter the 4-digit PIN (e.g. 7700).';
+        authErrorMsg.classList.remove('hidden');
+      }
+      organizerPasscodeInput.style.borderColor = '#f59e0b';
+      setTimeout(() => { organizerPasscodeInput.style.borderColor = ''; }, 1500);
+      organizerPasscodeInput.focus();
+      return;
+    }
+
+    if (VALID_ORGANIZER_CODES.includes(entered)) {
+      isOrganizerAuthorized = true;
+      if (authErrorMsg) authErrorMsg.classList.add('hidden');
+      if (modalOrganizerAuth) modalOrganizerAuth.classList.add('hidden');
       organizerPasscodeInput.value = '';
       organizerPasscodeInput.style.borderColor = '';
+      switchToOrganizerView();
+      showTicker('🔓 Organizer Command Center Unlocked. Welcome, Coordinator.');
+      alerts.playChirp(880, 0.15);
+    } else {
+      if (authErrorMsg) {
+        authErrorMsg.textContent = '❌ Invalid PIN. Please try again (Demo PIN: 7700).';
+        authErrorMsg.classList.remove('hidden');
+      }
+      alerts.playChirp(350, 0.2);
+      organizerPasscodeInput.style.borderColor = '#f43f5e';
+      setTimeout(() => { organizerPasscodeInput.style.borderColor = ''; }, 1500);
     }
-    switchToOrganizerView();
-    showTicker('🔓 Organizer Command Center Unlocked. Welcome, Coordinator.');
   }
 
   if (btnSubmitOrganizerAuth) {
@@ -1183,11 +1207,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Exit Console
+  // Lock Console
   if (btnLockOrganizer) {
     btnLockOrganizer.addEventListener('click', () => {
+      isOrganizerAuthorized = false;
       switchView('home');
-      showTicker('🏠 Returned to Home from Organizer Console.');
+      showTicker('🔒 Organizer Console Locked. PIN required for access.');
     });
   }
 

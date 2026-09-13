@@ -402,8 +402,8 @@
             <span class="auth-icon">🛡️</span>
             <span>Organizer Console: <strong class="text-sky-400">Authorized Session</strong></span>
           </div>
-          <button id="btnLockOrganizer" class="btn-xs btn-subtle" title="Return to Home">
-            🏠 Exit to Home
+          <button id="btnLockOrganizer" class="btn-xs btn-subtle" title="Lock console with PIN">
+            🔒 Lock Console
           </button>
         </div>
 
@@ -855,26 +855,26 @@
   <div id="modalOrganizerAuth" class="modal-backdrop hidden">
     <div class="modal-card border-sky-500/40">
       <div class="modal-header">
-        <h3>🔒 Organizer Access Required</h3>
+        <h3>🔒 Organizer PIN Required</h3>
         <button class="modal-close" data-close="modalOrganizerAuth">✕</button>
       </div>
       <p class="text-xs text-slate-300 mb-3">
-        Enter the event operations authorization code to access the operational command center, corridor roadblocks, and emergency surge alerts.
+        Enter the 4-digit operations PIN to access the operational command center, corridor roadblocks, and live crowd surge radar.
       </p>
 
       <div class="auth-input-group mb-3">
-        <label class="text-2xs text-slate-400 block mb-1">ENTER PASSCODE / PIN:</label>
-        <input type="password" id="organizerPasscodeInput" placeholder="Enter PIN / Code" class="form-input text-center text-sm font-bold tracking-widest" maxlength="16" autocomplete="off">
+        <label class="text-2xs text-slate-400 block mb-1">ENTER 4-DIGIT PIN OR PASSCODE:</label>
+        <input type="password" id="organizerPasscodeInput" placeholder="Enter PIN (e.g. 7700)" class="form-input text-center text-sm font-bold tracking-widest" maxlength="16" autocomplete="off">
         <div id="authErrorMsg" class="text-2xs text-rose-400 font-bold mt-1 hidden">
-          ❌ Invalid authorization code. Access denied.
+          ❌ Invalid authorization PIN. Access denied.
         </div>
       </div>
 
       <div class="quick-pass-hint p-2 bg-slate-900/80 rounded border border-slate-800 mb-3">
-        <span class="text-2xs text-slate-400 block mb-1">🔑 Demo Master Codes:</span>
+        <span class="text-2xs text-slate-400 block mb-1">🔑 Demo Access PIN:</span>
         <div class="flex gap-1 flex-wrap">
-          <button type="button" class="btn-xs btn-subtle" id="btnQuickFillPin">Fill: EVENT2026</button>
-          <button type="button" class="btn-xs btn-subtle" id="btnQuickFillNumeric">Fill: 7700</button>
+          <button type="button" class="btn-xs btn-subtle" id="btnQuickFillNumeric">PIN: 7700</button>
+          <button type="button" class="btn-xs btn-subtle" id="btnQuickFillPin">PIN: EVENT2026</button>
         </div>
       </div>
 
