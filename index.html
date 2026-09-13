@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>EventPulse — Smart Event Navigation & Crowd Safety</title>
+  <meta name="description" content="Ultra-lightweight, offline-first smart indoor event navigation and safety platform for mobile devices.">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/style.css?v=3.2">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
+  <script>
+    if ('caches' in window) {
+      caches.keys().then((keys) => {
+        keys.forEach((key) => {
+          if (key !== 'eventpulse-v3') caches.delete(key);
+        });
+      });
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased select-none">
+
+  <!-- Screen Flash Strobe Overlay (for haptic fallback & emergency alerts) -->
+  <div id="strobeOverlay" class="strobe-overlay hidden"></div>
+
+  <!-- Top App Bar / Mode Switcher -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo">
+        <span class="logo-icon">⚡</span>
+      </div>
+      <div>
+        <h1 class="brand-title">EventPulse</h1>
+        <div class="brand-sub">
+          <span id="networkStatusBadge" class="status-badge online">● ONLINE</span>
+          <span id="currentEventTime" class="event-time">11:00 AM • Day 1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dual Mode Switcher -->
+    <div class="mode-tabs">
+      <button id="tabAttendee" class="tab-btn active" title="Attendee Mobile Experience">
+        <span class="tab-icon">📱</span> Attendee
+      </button>
+      <button id="tabOrganizer" class="tab-btn" title="Organizer Command Center">
+        <span class="tab-icon">🖥️</span> Organizer
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="app-container">
+
+    <!-- ==================== 1. ATTENDEE VIEW ==================== -->
+    <main id="attendeeView" class="view-panel active">
+
+      <!-- Category Filter Pills Bar -->
+      <nav class="category-filters-container" aria-label="Category Filters">
+        <div class="category-filters" id="categoryFilters">
+          <button class="filter-pill active" data-cat="all">🌟 All</button>
+          <button class="filter-pill" data-cat="main_event">🏛️ Main Stage</button>
+          <button class="filter-pill" data-cat="small_event">💡 Workshops</button>
+          <button class="filter-pill" data-cat="food">🍔 Food & Coffee</button>
+          <button class="filter-pill" data-cat="merch">👕 Merch & Swag</button>
+          <button class="filter-pill" data-cat="restroom">🚻 Restrooms</button>
+          <button class="filter-pill" data-cat="buffer">🛋️ Lounges</button>
+        </div>
+      </nav>
+
+      <!-- Anchor / Quick Locate Bar -->
+      <section class="anchor-bar">
+        <div class="anchor-display">
+          <span class="anchor-label">YOUR LOCATION:</span>
+          <span id="currentAnchorBadge" class="anchor-badge">Pillar B4</span>
+        </div>
+        <div class="anchor-actions">
+          <button id="btnOpenCodeInput" class="btn-sm btn-subtle" title="Type 2-letter pillar code">
+            ⌨️ Code
+          </button>
+          <button id="btnOpenScanner" class="btn-sm btn-primary" title="Scan QR Code">
+            📷 Scan QR
+          </button>
+        </div>
+      </section>
+
+      <!-- Active Navigation Banner (Displays if navigating) -->
+      <section id="navBanner" class="nav-banner hidden">
+        <div class="nav-banner-content">
+          <div class="nav-direction-icon" id="navDirectionIcon">⬆️</div>
+          <div class="nav-info">
+            <div class="nav-instruction" id="navInstruction">Walk straight to Pillar C2</div>
+            <div class="nav-metrics">
+              <span id="navDistance">45m</span> • <span id="navTime">~35 sec</span>
+            </div>
+          </div>
+        </div>
+        <button id="btnCancelNav" class="btn-icon" title="Cancel Route">✕</button>
+      </section>
+
+      <!-- Announcement / Shift Flash Ticker -->
+      <div id="announcementTicker" class="announcement-ticker hidden">
+        <span class="ticker-badge">ALERT</span>
+        <span id="tickerText" class="ticker-text">Keynote 1 starts in 10m at Main Hall!</span>
+        <button id="btnCloseTicker" class="ticker-close">✕</button>
+      </div>
+
+      <!-- Interactive 2D Venue Canvas Viewport -->
+      <div class="map-viewport-wrapper">
+        <canvas id="venueCanvas" class="venue-canvas"></canvas>
+
+        <!-- Floating Map Controls -->
+        <div class="map-overlay-controls">
+          <div class="zoom-indicator-badge" id="zoomLevelBadge">Zoom: 1.0x (Overview)</div>
+          <div class="zoom-btn-group">
+            <button id="btnZoomIn" class="map-ctrl-btn" title="Zoom In">+</button>
+            <button id="btnZoomOut" class="map-ctrl-btn" title="Zoom Out">−</button>
+            <button id="btnCenterMe" class="map-ctrl-btn" title="Center on Me">🎯</button>
+          </div>
+        </div>
+
+        <!-- Floating AI Assistant Copilot Widget -->
+        <button id="btnFloatingAi" class="floating-ai-pill" title="Ask Gemini AI Event Guide">
+          <span class="floating-ai-sparkle">✨</span>
+          <span class="floating-ai-title">Ask Gemini AI</span>
+          <span class="floating-ai-badge">LIVE</span>
+        </button>
+
+        <!-- Semantic Zoom Tip Overlay -->
+        <div class="semantic-zoom-tip" id="semanticZoomTip">
+          💡 Zoom in to reveal detailed food & merchandise stalls
+        </div>
+      </div>
+
+      <!-- Quick Action Toolbar -->
+      <div class="attendee-bottom-toolbar">
+        <button id="btnToggleAccessibility" class="tool-btn" title="Wheelchair / Step-Free Mode">
+          <span class="tool-icon">♿</span>
+          <span class="tool-text" id="accessibilityLabel">Step-Free: OFF</span>
+        </button>
+        
+        <button id="btnFlockMode" class="tool-btn" title="Group Tracking / Tether">
+          <span class="tool-icon">👥</span>
+          <span class="tool-text">Flock (Group)</span>
+        </button>
+
+        <button id="btnOpenSchedule" class="tool-btn" title="Event Schedule">
+          <span class="tool-icon">📅</span>
+          <span class="tool-text">Schedule</span>
+        </button>
+
+        <button id="btnOpenSurvey" class="tool-btn" title="Tell us your interests and support needs">
+          <span class="tool-icon">🧭</span>
+          <span class="tool-text">My Picks</span>
+        </button>
+
+        <button id="btnOpenAssistant" class="tool-btn ai-guide-btn" title="AI-powered event guidance with Gemini">
+          <span class="ai-live-pulse-dot"></span>
+          <span class="tool-icon">✨</span>
+          <span class="tool-text">Gemini AI</span>
+        </button>
+
+        <button id="btnEmergencySOS" class="tool-btn alert-btn" title="Emergency & Priority Help">
+          <span class="tool-icon">🆘</span>
+          <span class="tool-text">SOS / Escort</span>
+        </button>
+      </div>
+
+    </main>
+
+    <!-- ==================== 2. ORGANIZER COMMAND CENTER ==================== -->
+    <aside id="organizerView" class="view-panel hidden">
+      <div class="organizer-container">
+        
+        <!-- Organizer Auth Status & Lock Button -->
+        <div class="ops-auth-bar">
+          <div class="ops-auth-info">
+            <span class="auth-icon">🛡️</span>
+            <span>Organizer Console: <strong class="text-sky-400">Authorized Session</strong></span>
+          </div>
+          <button id="btnLockOrganizer" class="btn-xs btn-subtle" title="Lock console and return to Attendee view">
+            🔒 Lock Console
+          </button>
+        </div>
+
+        <!-- Operations Header & Metrics -->
+        <div class="ops-stats-grid">
+          <div class="ops-stat-card">
+            <div class="stat-num" id="orgActiveCount">1,842</div>
+            <div class="stat-label">Active Attendees</div>
+          </div>
+          <div class="ops-stat-card">
+            <div class="stat-num text-amber-400" id="orgCrowdLevel">74%</div>
+            <div class="stat-label">Peak Venue Density</div>
+          </div>
+          <div class="ops-stat-card">
+            <div class="stat-num text-emerald-400" id="orgOpenBarriers">0</div>
+            <div class="stat-label">Active Roadblocks</div>
+          </div>
+          <div class="ops-stat-card">
+            <div class="stat-num text-rose-400" id="orgPendingTickets">1</div>
+            <div class="stat-label">Open Assistance Requests</div>
+          </div>
+        </div>
+
+        <!-- Dynamic Barrier & Stochastic Rerouting Console -->
+        <div class="ops-card">
+          <div class="ops-card-header">
+            <h3>🚧 Spatial Barriers & Crowd Rerouting</h3>
+            <span class="badge-sm">Anti-Oscillation Engine</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-3">
+            Click on any hallway below to drop a barrier. Set the reroute slider to dynamically divert a percentage of crowd flow without causing bottlenecks.
+          </p>
+          
+          <div class="corridor-toggle-list" id="corridorList">
+            <!-- Dynamically populated corridors -->
+          </div>
+
+          <div class="reroute-controls">
+            <div class="slider-row">
+              <label for="rerouteSlider" class="text-xs font-semibold">
+                Stochastic Reroute Ratio: <span id="rerouteValue" class="text-sky-400">40%</span>
+              </label>
+              <input type="range" id="rerouteSlider" min="10" max="100" step="5" value="40" class="w-full">
+            </div>
+            <p class="text-2xs text-slate-400">
+              * The software will randomly divert only <span id="rerouteValText">40%</span> of attendees to alternate corridors to prevent herd stampedes.
+            </p>
+            <button id="btnApplyReroute" class="btn btn-primary w-full mt-2">
+              Apply & Broadcast Detour
+            </button>
+          </div>
+        </div>
+
+        <!-- Priority Accessibility & Emergency SOS Queue -->
+        <div class="ops-card">
+          <div class="ops-card-header">
+            <h3>♿ Priority Accessibility & SOS Queue</h3>
+            <span class="badge-rose" id="ticketCountBadge">1 ACTIVE</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-2">
+            Specially-abled attendees requesting manual floor escort or emergency assistance.
+          </p>
+          <div class="ticket-list" id="ticketQueue">
+            <!-- Dynamically populated tickets -->
+          </div>
+        </div>
+
+        <!-- Special Needs Safety Watch -->
+        <div class="ops-card">
+          <div class="ops-card-header">
+            <h3>🛡️ Special Needs Safety Watch</h3>
+            <span class="badge-sm text-amber-300">MONITORED</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-2">
+            Attendees who flagged mobility, sensory, escort, or medical needs are tracked here for safety visibility.
+          </p>
+          <div class="support-watch-list" id="supportWatchList">
+            <!-- Dynamically populated support profiles -->
+          </div>
+        </div>
+
+        <!-- Live Zone Capacity & Overcrowding Radar -->
+        <div class="ops-card">
+          <div class="ops-card-header">
+            <h3>📊 Live Zone Capacity & Overcrowding Radar</h3>
+            <span class="badge-sm text-amber-400">Real-Time Sensor Grid</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-3">
+            Real-time occupancy levels. Zones crossing 85% safe capacity trigger crowd diversion warnings.
+          </p>
+          <div class="capacity-grid" id="zoneCapacityList">
+            <!-- Dynamically populated zone capacity cards -->
+          </div>
+        </div>
+
+        <!-- Stampede & Crowd Surge Hazard Alert Center -->
+        <div class="ops-card border-rose-500/50 bg-rose-950/20">
+          <div class="ops-card-header">
+            <h3 class="text-rose-400">🚨 Stampede & Crowd Surge Hazard Broadcast</h3>
+            <span class="badge-rose">HIGH PRIORITY</span>
+          </div>
+          <p class="text-xs text-slate-300 mb-3">
+            Trigger an instant emergency surge warning across all attendee screens. Will flash red screen strobes, sound alarms, block entry corridors, and divert foot traffic to safe exits.
+          </p>
+          <div class="stampede-controls">
+            <div class="form-row mb-2">
+              <label class="text-2xs text-slate-400 block mb-1">SELECT SURGE BOTTLENECK ZONE:</label>
+              <select id="stampedeZoneSelect" class="form-input text-xs">
+                <option value="Grand Auditorium (Main 1)">Grand Auditorium Foyer (Overcrowding Surge)</option>
+                <option value="Central Galleria Highway">Central Galleria (Corridor Bottleneck)</option>
+                <option value="Food Court Plaza">Food Court Plaza (Choke Point)</option>
+              </select>
+            </div>
+            <button id="btnTriggerStampedeAlert" class="btn btn-danger w-full">
+              🚨 Issue Stampede Surge Warning & Divert Crowd
+            </button>
+          </div>
+        </div>
+
+        <!-- Schedule & Venue Relocation Manager -->
+        <div class="ops-card">
+          <div class="ops-card-header">
+            <h3>🗓️ Schedule Delay & Venue Relocation Manager</h3>
+            <span class="badge-sm">Live Sync Engine</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-3">
+            Postpone sessions, update start times, or relocate to a new hall. Automatically updates attendee schedules and prompts instant rerouting.
+          </p>
+          <div class="schedule-manager-grid">
+            <div class="form-group mb-2">
+              <label class="text-2xs text-slate-400 block mb-1">SELECT SESSION:</label>
+              <select id="relocateSessionSelect" class="form-input text-xs">
+                <option value="main_keynote">Opening Keynote: Autonomous Agents (11:30 AM)</option>
+                <option value="main_stage2">Tech Spotlight: Low-Power Edge AI (1:00 PM)</option>
+                <option value="ws_room_a">Workshop A: Hands-on AI Workflows (2:00 PM)</option>
+              </select>
+            </div>
+
+            <div class="form-group mb-2">
+              <label class="text-2xs text-slate-400 block mb-1">ACTION / UPDATE:</label>
+              <select id="relocateActionSelect" class="form-input text-xs">
+                <option value="delay_15">⏱️ Delay by +15 Minutes (Postponed)</option>
+                <option value="delay_30">⏱️ Delay by +30 Minutes (Postponed)</option>
+                <option value="move_stage2">🏛️ Move Venue to Stage 2: Tech Spotlight</option>
+                <option value="move_keynote">🏛️ Move Venue to Grand Auditorium</option>
+                <option value="move_lounge">🛋️ Move to Quiet Buffer Lounge</option>
+              </select>
+            </div>
+
+            <button id="btnPublishScheduleChange" class="btn btn-primary w-full mt-2">
+              📢 Publish Change & Sync All Attendee Maps
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Announcement Broadcast -->
+        <div class="ops-card">
+          <div class="ops-card-header">
+            <h3>📢 Custom Broadcast Announcement</h3>
+          </div>
+          <div class="broadcast-form">
+            <input type="text" id="broadcastInput" placeholder="e.g., Keynote starting in 5 mins. Overflow seating in Stage 2." class="form-input">
+            <div class="broadcast-actions">
+              <button id="btnSendRestroomAlert" class="btn-xs btn-subtle">Restroom Hub A Full</button>
+              <button id="btnSubmitBroadcast" class="btn-xs btn-primary">Broadcast Now</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- ==================== MODALS & DRAWERS ==================== -->
+
+  <!-- Modal: 2-Character Anchor Code Input -->
+  <div id="modalCodeInput" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>📍 Enter Pillar Code</h3>
+        <button class="modal-close" data-close="modalCodeInput">✕</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">
+        Look at the nearest physical pillar or booth sign and enter the 2-character code (e.g. <strong class="text-sky-300">B4, A1, C2</strong>):
+      </p>
+      <div class="code-input-row">
+        <input type="text" id="anchorTextInput" maxlength="3" placeholder="B4" class="code-input" autofocus autocomplete="off">
+        <button id="btnConfirmAnchorCode" class="btn btn-primary">Locate Me</button>
+      </div>
+      <div class="quick-anchors-list">
+        <span class="text-2xs text-slate-400">Quick Test Pillars:</span>
+        <div class="quick-pill-tags">
+          <button class="quick-code-btn" data-code="A1">A1 (Main Entrance)</button>
+          <button class="quick-code-btn" data-code="B4">B4 (Food Court)</button>
+          <button class="quick-code-btn" data-code="C2">C2 (Workshop Hub)</button>
+          <button class="quick-code-btn" data-code="D1">D1 (Keynote Hall)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: QR Code Scanner Simulation -->
+  <div id="modalQRScanner" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>📷 Scan Pillar QR</h3>
+        <button class="modal-close" data-close="modalQRScanner">✕</button>
+      </div>
+      <div class="scanner-camera-box">
+        <div class="scanner-laser"></div>
+        <div class="scanner-target"></div>
+        <p class="scanner-hint">Point camera at the QR code on the pillar</p>
+      </div>
+      <div class="scanner-sim-buttons">
+        <p class="text-2xs text-slate-400 mb-1">Simulate scanning a pillar QR:</p>
+        <div class="quick-pill-tags">
+          <button class="quick-code-btn" data-code="A1">Scan Pillar A1</button>
+          <button class="quick-code-btn" data-code="B2">Scan Pillar B2</button>
+          <button class="quick-code-btn" data-code="B4">Scan Pillar B4</button>
+          <button class="quick-code-btn" data-code="C3">Scan Pillar C3</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Flock Mode (Group Tethering & Leader Failover) -->
+  <div id="modalFlockMode" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>👥 Flock Mode (Group Tether)</h3>
+        <button class="modal-close" data-close="modalFlockMode">✕</button>
+      </div>
+
+      <div class="flock-status-card mb-3">
+        <div class="flock-header-row">
+          <div>
+            <span class="text-2xs text-slate-400">ROOM CODE:</span>
+            <span id="flockRoomCode" class="font-bold text-sky-400 text-sm ml-1">FLOCK7</span>
+          </div>
+          <div class="badge-sm" id="flockRoleBadge">👑 LEADER</div>
+        </div>
+        
+        <div class="flock-members-list mt-2" id="flockMembersList">
+          <!-- Populated dynamically with leader & members -->
+        </div>
+      </div>
+
+      <!-- Test simulation actions for Leader Failover -->
+      <div class="flock-sim-panel">
+        <h4 class="text-xs font-bold text-slate-300 mb-1">Test Safety & Failover Scenarios:</h4>
+        <div class="sim-actions-grid">
+          <button id="btnSimLeaderStray" class="btn-xs btn-subtle">⚠️ Simulate Leader Stray (>35m)</button>
+          <button id="btnSimLowBattery" class="btn-xs btn-subtle">🔋 Simulate Leader Battery &lt;10%</button>
+          <button id="btnSimTorchPass" class="btn-xs btn-primary">👑 Auto-Pass Torch to Member 2</button>
+        </div>
+      </div>
+
+      <div class="modal-footer mt-3">
+        <button class="btn btn-subtle w-full" data-close="modalFlockMode">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Priority Accessibility & Emergency SOS Ticket -->
+  <div id="modalSOS" class="modal-backdrop hidden">
+    <div class="modal-card border-rose-500/40">
+      <div class="modal-header">
+        <h3 class="text-rose-400">🆘 Priority Assistance / SOS</h3>
+        <button class="modal-close" data-close="modalSOS">✕</button>
+      </div>
+      <p class="text-xs text-slate-300 mb-3">
+        Specially-abled attendees requesting wheelchair assistance, broken elevator escort, or medical help:
+      </p>
+
+      <div class="ticket-reason-select mb-3">
+        <label class="text-2xs text-slate-400 block mb-1">SELECT NEED:</label>
+        <select id="sosNeedSelect" class="form-input text-xs">
+          <option value="broken_elevator">♿ Elevator / Ramp Broken (Need Physical Escort)</option>
+          <option value="wheelchair_assistance">🦯 Specially-Abled Mobility Assistance</option>
+          <option value="sensory_overload">🎧 Sensory Overload (Need Quiet Room Escort)</option>
+          <option value="medical_first_aid">🩹 Medical / First Aid Emergency</option>
+        </select>
+      </div>
+
+      <div class="current-loc-confirm p-2 bg-slate-900 rounded border border-slate-800 mb-3">
+        <span class="text-2xs text-slate-400">STAFF WILL DISPATCH TO YOUR LOCATION:</span>
+        <div class="font-bold text-sky-400 text-sm" id="sosLocationPreview">Pillar B4 (Near Food Court)</div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btnSubmitSOSTicket" class="btn btn-danger w-full">
+          🚨 Request Priority Floor Escort Now
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Destination Info & Route Starter -->
+  <div id="modalNodeInfo" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="nodeInfoTitle">Stage 1 Keynote</h3>
+        <button class="modal-close" data-close="modalNodeInfo">✕</button>
+      </div>
+      <div class="node-info-body">
+        <div class="node-badge-row">
+          <span id="nodeInfoCategory" class="badge-sm">Main Event</span>
+          <span id="nodeInfoAccessibility" class="badge-sm text-emerald-400">♿ Step-Free</span>
+        </div>
+        <p id="nodeInfoDesc" class="text-xs text-slate-300 my-2">Opening Keynote by Dr. Aris: The Future of Autonomous Agents.</p>
+        <div class="node-timing text-2xs text-slate-400" id="nodeInfoTiming">
+          Starts: 11:30 AM • Duration: 45 min
+        </div>
+      </div>
+      <div class="modal-actions mt-3">
+        <button id="btnStartNavigation" class="btn btn-primary w-full">
+          🚶 Get Walking Directions
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Event Preferences Survey -->
+  <div id="modalSurvey" class="modal-backdrop hidden">
+    <div class="modal-card max-h-80vh overflow-y-auto">
+      <div class="modal-header">
+        <h3>🧭 Personal Event Preferences</h3>
+        <button class="modal-close" data-close="modalSurvey">✕</button>
+      </div>
+      <p class="text-xs text-slate-300 mb-3">
+        Tell us what interests you most and whether you need any support so we can tailor recommendations and accessibility options.
+      </p>
+
+      <div class="survey-section">
+        <label class="survey-label">What events are you interested in?</label>
+        <div class="survey-option-grid">
+          <label class="survey-option"><input type="checkbox" value="main_event"> Keynotes & main stage</label>
+          <label class="survey-option"><input type="checkbox" value="small_event"> Workshops & labs</label>
+          <label class="survey-option"><input type="checkbox" value="food"> Food & coffee</label>
+          <label class="survey-option"><input type="checkbox" value="merch"> Merch & networking</label>
+          <label class="survey-option"><input type="checkbox" value="buffer"> Quiet lounge / recharge</label>
+          <label class="survey-option"><input type="checkbox" value="restroom"> Restrooms & services</label>
+        </div>
+      </div>
+
+      <div class="survey-section">
+        <label class="survey-label">Do you require any special assistance?</label>
+        <div class="survey-option-grid">
+          <label class="survey-option"><input type="checkbox" value="wheelchair"> Wheelchair / step-free route</label>
+          <label class="survey-option"><input type="checkbox" value="quiet_space"> Sensory-friendly / quiet space</label>
+          <label class="survey-option"><input type="checkbox" value="medical"> Medical / first aid support</label>
+          <label class="survey-option"><input type="checkbox" value="escort"> Need a staff escort</label>
+          <label class="survey-option"><input type="checkbox" value="no_assistance"> No assistance needed</label>
+        </div>
+      </div>
+
+      <div class="survey-actions">
+        <button id="btnSaveSurvey" class="btn btn-primary w-full">Save My Preferences</button>
+        <button id="btnSkipSurvey" class="btn btn-subtle w-full mt-2">Maybe Later</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Trusted AI Event Assistant (Gemini-powered) -->
+  <div id="modalAssistant" class="modal-backdrop hidden">
+    <div class="modal-card assistant-card">
+      <div class="modal-header">
+        <h3>🤖 EventPulse AI Guide</h3>
+        <button class="modal-close" data-close="modalAssistant">✕</button>
+      </div>
+
+      <div class="assistant-status-row">
+        <span id="geminiStatusBadge" class="assistant-status-badge">✅ Gemini AI Active</span>
+      </div>
+
+      <div class="assistant-topic-picker">
+        <button class="assistant-topic active" data-topic="navigation">Navigation</button>
+        <button class="assistant-topic" data-topic="emergency">Emergency</button>
+        <button class="assistant-topic" data-topic="accessibility">Accessibility</button>
+        <button class="assistant-topic" data-topic="schedule">Schedule</button>
+      </div>
+
+      <div class="assistant-quick-prompts">
+        <button class="quick-prompt-chip" data-prompt="Where is the food court and coffee?">🍔 Food Court</button>
+        <button class="quick-prompt-chip" data-prompt="How do I reach a step-free wheelchair route?">♿ Step-Free</button>
+        <button class="quick-prompt-chip" data-prompt="Where is the quiet lounge to rest?">🛋️ Quiet Room</button>
+        <button class="quick-prompt-chip" data-prompt="What should I do if there is an emergency or overcrowding?">🆘 Emergency</button>
+        <button class="quick-prompt-chip" data-prompt="What sessions are happening at the Main Keynote Stage?">🏛️ Keynote</button>
+      </div>
+
+      <div class="assistant-chat" id="assistantChat">
+        <div class="assistant-message assistant-message-ai">
+          👋 Hi! I am EventPulse, powered by <strong>Gemini 2.0 Flash</strong>. I can guide you anywhere across the venue, calculate accessible step-free paths, and provide emergency safety instructions. How can I help you right now?
+        </div>
+      </div>
+
+      <div class="assistant-input-row">
+        <input id="assistantPromptInput" class="form-input" type="text" placeholder="Ask: Where is the quiet lounge?" maxlength="200">
+        <button id="btnAskAssistant" class="btn btn-primary">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Schedule List -->
+  <div id="modalSchedule" class="modal-backdrop hidden">
+    <div class="modal-card max-h-80vh overflow-y-auto">
+      <div class="modal-header">
+        <h3>📅 Event Schedule & Delays</h3>
+        <button class="modal-close" data-close="modalSchedule">✕</button>
+      </div>
+      <div class="schedule-list" id="scheduleListContainer">
+        <!-- Dynamically rendered schedule items -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Organizer Passcode / PIN Authorization -->
+  <div id="modalOrganizerAuth" class="modal-backdrop hidden">
+    <div class="modal-card border-sky-500/40">
+      <div class="modal-header">
+        <h3>🔒 Organizer Access Required</h3>
+        <button class="modal-close" data-close="modalOrganizerAuth">✕</button>
+      </div>
+      <p class="text-xs text-slate-300 mb-3">
+        Enter the event operations authorization code to access the operational command center, corridor roadblocks, and emergency surge alerts.
+      </p>
+
+      <div class="auth-input-group mb-3">
+        <label class="text-2xs text-slate-400 block mb-1">ENTER PASSCODE / PIN:</label>
+        <input type="password" id="organizerPasscodeInput" placeholder="Enter PIN / Code" class="form-input text-center text-sm font-bold tracking-widest" maxlength="16" autocomplete="off">
+        <div id="authErrorMsg" class="text-2xs text-rose-400 font-bold mt-1 hidden">
+          ❌ Invalid authorization code. Access denied.
+        </div>
+      </div>
+
+      <div class="quick-pass-hint p-2 bg-slate-900/80 rounded border border-slate-800 mb-3">
+        <span class="text-2xs text-slate-400 block mb-1">🔑 Demo Master Codes:</span>
+        <div class="flex gap-1 flex-wrap">
+          <button type="button" class="btn-xs btn-subtle" id="btnQuickFillPin">Fill: EVENT2026</button>
+          <button type="button" class="btn-xs btn-subtle" id="btnQuickFillNumeric">Fill: 7700</button>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btnSubmitOrganizerAuth" class="btn btn-primary w-full">
+          🔓 Unlock Command Center
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts with Cache Busting -->
+  <script src="js/map-data.js?v=3.2"></script>
+  <script src="js/pathfinder.js?v=3.2"></script>
+  <script src="js/glance-alerts.js?v=3.2"></script>
+  <script src="js/map-renderer.js?v=3.2"></script>
+  <script src="js/anchor-engine.js?v=3.2"></script>
+  <script src="js/flock-manager.js?v=3.2"></script>
+  <script src="js/accessibility-desk.js?v=3.2"></script>
+  <script src="js/organizer.js?v=3.2"></script>
+  <script src="js/gemini-client.js?v=3.2"></script>
+  <script src="js/app.js?v=3.2"></script>
+
+</body>
+</html>

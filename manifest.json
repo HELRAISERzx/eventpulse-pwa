@@ -1,0 +1,16 @@
+{
+  "name": "EventPulse — Smart Event Navigation",
+  "short_name": "EventPulse",
+  "description": "Ultra-lightweight offline indoor event navigation & crowd safety",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192' fill='%2338bdf8'><rect width='192' height='192' rx='36' fill='%230f172a'/><path d='M96 24L32 64l64 40 64-40-64-40zM32 128l64 40 64-40M32 96l64 40 64-40' stroke='%2338bdf8' stroke-width='12' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}

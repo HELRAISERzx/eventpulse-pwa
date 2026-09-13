@@ -1,0 +1,937 @@
+// EventPulse - Main Application Coordinator
+// Orchestrates PWA offline capabilities, navigation flows, and dual-mode syncing
+
+document.addEventListener('DOMContentLoaded', () => {
+  // 1. Register Service Worker for Offline PWA Support
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+      .then(() => console.log('EventPulse ServiceWorker Registered'))
+      .catch((err) => console.warn('SW registration skipped:', err));
+  }
+
+  // 2. Initialize Core Subsystems
+  const alerts = new GlanceAlerts();
+  const pathfinder = new VenuePathfinder(VENUE_DATA);
+  const canvas = document.getElementById('venueCanvas');
+  const gemini = new GeminiClient(); // Gemini AI — browser-direct REST client
+  // Seed API key on first load (stored in localStorage for subsequent visits)
+  if (!gemini.hasKey()) {
+    gemini.setKey('AIzaSyC8RAuV-2tGaGKuYog7_B5NRKpr9WOk0XU');
+  }
+
+  let activeTargetNode = null;
+  let isWheelchairMode = false;
+
+  // Map click handler (opens node details modal)
+  const onNodeClick = (node) => {
+    if (node.isAnchor) {
+      // Set as current location directly if tapping an anchor
+      anchorEngine.locateByCode(node.anchorCode);
+      return;
+    }
+
+    const modal = document.getElementById('modalNodeInfo');
+    const title = document.getElementById('nodeInfoTitle');
+    const cat = document.getElementById('nodeInfoCategory');
+    const acc = document.getElementById('nodeInfoAccessibility');
+    const desc = document.getElementById('nodeInfoDesc');
+    const timing = document.getElementById('nodeInfoTiming');
+
+    title.textContent = `${node.icon} ${node.label}`;
+    cat.textContent = node.cat.replace('_', ' ').toUpperCase();
+    acc.textContent = node.stairsRequired ? '⚠️ Stairs Required' : '♿ Step-Free';
+    acc.className = `badge-sm ${node.stairsRequired ? 'text-amber-400' : 'text-emerald-400'}`;
+    desc.textContent = node.desc || 'No additional details available.';
+    timing.textContent = node.time ? `Scheduled: ${node.time}` : 'Open all day';
+
+    activeTargetNode = node;
+    modal.classList.remove('hidden');
+  };
+
+  const renderer = new VenueMapRenderer(canvas, VENUE_DATA, onNodeClick);
+
+  // Anchor engine
+  const anchorEngine = new AnchorEngine(VENUE_DATA, (code, nodeId) => {
+    renderer.currentAnchor = nodeId;
+    document.getElementById('currentAnchorBadge').textContent = `Pillar ${code}`;
+    document.getElementById('sosLocationPreview').textContent = `Pillar ${code}`;
+    renderer.centerOnNode(nodeId);
+
+    // If currently navigating, recalculate route from new anchor
+    if (renderer.targetNodeId) {
+      calculateAndDisplayRoute(renderer.targetNodeId);
+    }
+  });
+
+  // Accessibility helpdesk
+  const accessibilityDesk = new AccessibilityDesk((tickets) => {
+    if (organizer) {
+      organizer.renderTicketsQueue();
+    }
+  });
+
+  // Flock Manager
+  const flockManager = new FlockManager(alerts, (update) => {
+    renderFlockUI();
+    if (update.event === 'FAILOVER_COMPLETE') {
+      showTicker(`👑 LEADERSHIP PASSED to ${update.newLeaderName}! Last pin of ${update.lostMember}: Pillar ${update.lastLocation}`);
+      alerts.triggerEmergencyAlert('Leadership failover executed.');
+    }
+  });
+
+  // Broadcast receiver from organizer
+  const onBroadcastReceived = (payload) => {
+    if (payload.type === 'STAMPEDE_HAZARD') {
+      // Critical Red Emergency Siren & Screen Strobe
+      showTicker(payload.message);
+      alerts.triggerEmergencyAlert(payload.message);
+
+      // Recalculate route if navigating
+      if (renderer.targetNodeId) {
+        calculateAndDisplayRoute(renderer.targetNodeId);
+      }
+    } else if (payload.type === 'VENUE_RELOCATION') {
+      showTicker(payload.message);
+      alerts.triggerEmergencyAlert('Venue Relocated! Updating Route...');
+
+      if (payload.newTargetId) {
+        // Automatically redraw route to new venue
+        calculateAndDisplayRoute(payload.newTargetId);
+      }
+    } else if (payload.type === 'CROWD_DIVERSION') {
+      showTicker(payload.message);
+      alerts.triggerTurnAlert('Crowd Diversion Active');
+      if (renderer.targetNodeId) {
+        calculateAndDisplayRoute(renderer.targetNodeId);
+      }
+    } else if (payload.type === 'STOCHASTIC_REROUTE') {
+      if (payload.userAffected && renderer.targetNodeId) {
+        showTicker(`🔄 DETOUR APPLIED: You are in the ${payload.percentage}% pool rerouted around congestion!`);
+        alerts.triggerTurnAlert('Route recalculating around congestion');
+        calculateAndDisplayRoute(renderer.targetNodeId);
+      } else {
+        showTicker(payload.message);
+      }
+    } else {
+      showTicker(payload.message);
+      alerts.triggerTurnAlert('New Announcement');
+    }
+  };
+
+  // Organizer Controller
+  const organizer = new OrganizerController(
+    VENUE_DATA,
+    renderer,
+    pathfinder,
+    accessibilityDesk,
+    alerts,
+    onBroadcastReceived
+  );
+
+  // Survey / Personalization State
+  const STORAGE_KEY = 'eventpulse-user-profile';
+  const userProfile = {
+    id: `guest-${Math.random().toString(36).slice(2, 8)}`,
+    name: 'Guest Attendee',
+    interests: new Set(),
+    assistance: new Set(),
+    location: 'B4'
+  };
+
+  function loadUserProfile() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+
+      const saved = JSON.parse(raw);
+      if (!saved || typeof saved !== 'object') return false;
+
+      userProfile.id = saved.id || userProfile.id;
+      userProfile.name = saved.name || userProfile.name;
+      userProfile.location = saved.location || userProfile.location;
+      userProfile.interests = new Set(Array.isArray(saved.interests) ? saved.interests : []);
+      userProfile.assistance = new Set(Array.isArray(saved.assistance) ? saved.assistance : []);
+
+      if (userProfile.assistance.has('wheelchair')) {
+        isWheelchairMode = true;
+        const btnAccessibility = document.getElementById('btnToggleAccessibility');
+        const accessibilityLabel = document.getElementById('accessibilityLabel');
+        if (btnAccessibility) btnAccessibility.classList.add('active');
+        if (accessibilityLabel) accessibilityLabel.textContent = 'Step-Free: ON ♿';
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('Could not load saved profile:', error);
+      return false;
+    }
+  }
+
+  function saveUserProfile() {
+    try {
+      const payload = {
+        id: userProfile.id,
+        name: userProfile.name,
+        location: anchorEngine.currentCode || userProfile.location,
+        interests: Array.from(userProfile.interests),
+        assistance: Array.from(userProfile.assistance)
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      console.warn('Could not save profile:', error);
+    }
+  }
+
+  function openSurveyModal() {
+    const modal = document.getElementById('modalSurvey');
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  function closeSurveyModal() {
+    const modal = document.getElementById('modalSurvey');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function getSurveySelections() {
+    const interestBoxes = document.querySelectorAll('#modalSurvey input[type="checkbox"]');
+    const nextProfile = {
+      interests: new Set(),
+      assistance: new Set()
+    };
+
+    interestBoxes.forEach((checkbox) => {
+      const value = checkbox.value;
+      if (!checkbox.checked) return;
+      if (['main_event', 'small_event', 'food', 'merch', 'buffer', 'restroom'].includes(value)) {
+        nextProfile.interests.add(value);
+      }
+      if (['wheelchair', 'quiet_space', 'medical', 'escort', 'no_assistance'].includes(value)) {
+        nextProfile.assistance.add(value);
+      }
+    });
+
+    return nextProfile;
+  }
+
+  function saveSurveyPreferences() {
+    const nextProfile = getSurveySelections();
+    userProfile.interests = nextProfile.interests;
+    userProfile.assistance = nextProfile.assistance;
+    userProfile.location = anchorEngine.currentCode || 'B4';
+    saveUserProfile();
+
+    if (userProfile.assistance.size > 0 && !userProfile.assistance.has('no_assistance')) {
+      const supportProfile = {
+        id: userProfile.id,
+        name: userProfile.name,
+        needs: Array.from(userProfile.assistance),
+        location: userProfile.location,
+        status: 'MONITORED',
+        lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      if (organizer && typeof organizer.registerSupportProfile === 'function') {
+        organizer.registerSupportProfile(supportProfile);
+      }
+
+      if (userProfile.assistance.has('wheelchair')) {
+        isWheelchairMode = true;
+        renderer.isWheelchairMode = true;
+        const btnAccessibility = document.getElementById('btnToggleAccessibility');
+        const accessibilityLabel = document.getElementById('accessibilityLabel');
+        if (btnAccessibility) btnAccessibility.classList.add('active');
+        if (accessibilityLabel) accessibilityLabel.textContent = 'Step-Free: ON ♿';
+      }
+    }
+
+    closeSurveyModal();
+    renderScheduleList();
+
+    const interestSummary = userProfile.interests.size > 0
+      ? `Recommended picks updated for ${Array.from(userProfile.interests).length} interest areas.`
+      : 'No interests selected yet — browse the full schedule.';
+
+    const helpSummary = userProfile.assistance.size > 0 && !userProfile.assistance.has('no_assistance')
+      ? `Accessibility profile saved and staff tracking enabled for ${Array.from(userProfile.assistance).length} support need(s).`
+      : 'No special assistance needs flagged.';
+
+    showTicker(`🧭 ${interestSummary} ${helpSummary}`);
+  }
+
+  function populateSurveyFromProfile() {
+    const boxes = document.querySelectorAll('#modalSurvey input[type="checkbox"]');
+    boxes.forEach((checkbox) => {
+      const isInterest = ['main_event', 'small_event', 'food', 'merch', 'buffer', 'restroom'].includes(checkbox.value);
+      const isAssistance = ['wheelchair', 'quiet_space', 'medical', 'escort', 'no_assistance'].includes(checkbox.value);
+      const selected = isInterest ? userProfile.interests.has(checkbox.value) : userProfile.assistance.has(checkbox.value);
+      checkbox.checked = selected;
+    });
+  }
+
+  // Load stored preferences on startup when app initializes
+  loadUserProfile();
+  renderScheduleList();
+
+  // Trusted AI Assistant: curated guidance for navigation, emergency, accessibility, and schedule tasks
+  const aiResponses = {
+    navigation: {
+      default: 'Head toward the nearest anchor sign and use the route planner. For step-free travel, toggle the accessibility mode on before starting directions.',
+      examples: [
+        'Start walking from your current pillar to the nearest active stage, then follow the highlighted route.',
+        'Use the nearest anchor or pillar code to re-center your position before setting a destination.'
+      ]
+    },
+    emergency: {
+      default: 'Go to the nearest safe exit or assistance point, and use the SOS button to request staff support immediately. Keep clear of crowded corridors.',
+      examples: [
+        'Contact staff through the SOS queue and move toward the nearest service hub or exit.',
+        'If you feel unsafe, notify nearby volunteers and stay calm while following the broadcast instructions.'
+      ]
+    },
+    accessibility: {
+      default: 'Use the step-free route toggle and request a staff escort if you need additional mobility or quiet-space support.',
+      examples: [
+        'Choose step-free routes to avoid stairs and identify accessible restrooms or quiet zones.',
+        'If you need assistance, submit a support ticket from the SOS flow and stay near your last known pillar.'
+      ]
+    },
+    schedule: {
+      default: 'Open the schedule panel for session times, then tap a session to see the route and suggested arrival window.',
+      examples: [
+        'The AI guide recommends sessions based on your selected interests and accessibility profile.',
+        'Check the schedule feed for updates, delays, or venue changes before heading out.'
+      ]
+    }
+  };
+
+  function addAssistantMessage(text, isUser = false) {
+    const chat = document.getElementById('assistantChat');
+    if (!chat) return;
+
+    const msg = document.createElement('div');
+    msg.className = `assistant-message ${isUser ? 'assistant-message-user' : 'assistant-message-ai'}`;
+    msg.textContent = text;
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  // ── Gemini Status Badge ─────────────────────────────────────────
+
+  function updateGeminiStatusBadge() {
+    const badge = document.getElementById('geminiStatusBadge');
+    if (!badge) return;
+    if (gemini.hasKey()) {
+      badge.textContent = '✨ Gemini 2.0 Flash • Verified Event Copilot';
+      badge.style.color = '#4ade80';
+      badge.style.borderColor = '#166534';
+    } else {
+      badge.textContent = '⚙️ EventPulse Assistant • Local Fallback Active';
+      badge.style.color = '#94a3b8';
+      badge.style.borderColor = '';
+    }
+  }
+
+  // ── AI Response (Gemini → Proxy → Local Fallback) ────────────────
+
+  function addTypingIndicator() {
+    const chat = document.getElementById('assistantChat');
+    if (!chat) return null;
+    const el = document.createElement('div');
+    el.id = 'typingIndicator';
+    el.className = 'assistant-message assistant-message-ai';
+    el.style.color = '#64748b';
+    el.style.fontStyle = 'italic';
+    el.textContent = '⟳ Thinking…';
+    chat.appendChild(el);
+    chat.scrollTop = chat.scrollHeight;
+    return el;
+  }
+
+  function removeTypingIndicator() {
+    const el = document.getElementById('typingIndicator');
+    if (el) el.remove();
+  }
+
+  async function getAiResponse(topic, userText) {
+    userText = userText || '';
+    topic = topic || 'navigation';
+
+    // 1. Try Gemini browser-direct with streaming
+    if (gemini.hasKey()) {
+      try {
+        const chat = document.getElementById('assistantChat');
+        const streamMsg = document.createElement('div');
+        streamMsg.className = 'assistant-message assistant-message-ai';
+        streamMsg.textContent = '';
+        chat.appendChild(streamMsg);
+        chat.scrollTop = chat.scrollHeight;
+
+        const fullText = await gemini.askStreaming(
+          userText || 'Give me a quick tip for navigating this event.',
+          topic,
+          VENUE_DATA,
+          (partialText) => {
+            streamMsg.textContent = partialText;
+            chat.scrollTop = chat.scrollHeight;
+          }
+        );
+
+        if (fullText) {
+          streamMsg.textContent = fullText;
+          return '__STREAMED__'; // Signal that response already rendered
+        }
+        streamMsg.remove();
+      } catch (err) {
+        removeTypingIndicator();
+        console.warn('Gemini browser-direct failed, trying proxy:', err.message);
+        // Show error badge temporarily
+        const badge = document.getElementById('geminiStatusBadge');
+        if (badge) {
+          const prev = badge.textContent;
+          badge.textContent = '⚠️ API Error: ' + err.message.slice(0, 40);
+          badge.style.color = '#f87171';
+          setTimeout(() => { badge.textContent = prev; badge.style.color = '#4ade80'; }, 4000);
+        }
+      }
+    }
+
+    // 2. Try local Express proxy (when Node server is running)
+    try {
+      const response = await fetch('http://localhost:3000/api/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: userText || aiResponses[topic].default, topic })
+      });
+
+      if (!response.ok) throw new Error('Proxy unavailable');
+      const data = await response.json();
+      if (data && data.answer) return data.answer;
+    } catch (error) {
+      console.warn('Gemini proxy unavailable, using local fallback:', error.message);
+    }
+
+    // 3. Local curated fallback
+    const topicSet = aiResponses[topic] || aiResponses.navigation;
+    const text = userText.toLowerCase();
+
+    if (text.includes('where') || text.includes('nearest') || text.includes('find')) {
+      return topic === 'emergency'
+        ? 'Use the nearest service hub or exit and tap SOS to request immediate staff help. Your current pillar location will be shared with responders.'
+        : topic === 'accessibility'
+          ? 'Use the step-free toggle and select your destination for the safest route. Quiet rooms and accessible restrooms are marked on the map.'
+          : topic === 'schedule'
+            ? 'Open the event schedule and filter by your interests. Sessions you selected will be highlighted.'
+            : 'Open the map and select the destination. Follow the highlighted path from your current anchor pillar.';
+    }
+    if (text.includes('emergency') || text.includes('danger') || text.includes('help')) return topicSet.examples[0];
+    if (text.includes('quiet') || text.includes('access') || text.includes('wheelchair')) return topicSet.examples[1];
+    if (text.includes('schedule') || text.includes('session') || text.includes('time')) return topicSet.examples[0];
+
+    return topicSet.default;
+  }
+
+  function activateAssistantTopic(topic) {
+    document.querySelectorAll('.assistant-topic').forEach((button) => {
+      button.classList.toggle('active', button.dataset.topic === topic);
+    });
+
+    const chat = document.getElementById('assistantChat');
+    if (chat && (!chat.dataset.topic || chat.dataset.topic !== topic)) {
+      addAssistantMessage(`Mode: ${topic.charAt(0).toUpperCase() + topic.slice(1)} support. ${aiResponses[topic].default}`);
+      chat.dataset.topic = topic;
+    }
+  }
+
+  updateGeminiStatusBadge();
+
+  // Unified Assistant Modal Trigger (Toolbar & Floating Map Pill)
+  const openAssistantModal = () => {
+    const modal = document.getElementById('modalAssistant');
+    if (modal) {
+      modal.classList.remove('hidden');
+      updateGeminiStatusBadge();
+      const input = document.getElementById('assistantPromptInput');
+      if (input) setTimeout(() => input.focus(), 150);
+    }
+  };
+
+  const btnOpenAssistant = document.getElementById('btnOpenAssistant');
+  if (btnOpenAssistant) btnOpenAssistant.addEventListener('click', openAssistantModal);
+
+  const btnFloatingAi = document.getElementById('btnFloatingAi');
+  if (btnFloatingAi) btnFloatingAi.addEventListener('click', openAssistantModal);
+
+  // Quick Prompt Suggestion Chips
+  document.querySelectorAll('.quick-prompt-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const promptText = chip.getAttribute('data-prompt');
+      const input = document.getElementById('assistantPromptInput');
+      if (input && promptText) {
+        input.value = promptText;
+        document.getElementById('btnAskAssistant')?.click();
+      }
+    });
+  });
+
+  document.querySelectorAll('.assistant-topic').forEach((button) => {
+    button.addEventListener('click', () => activateAssistantTopic(button.dataset.topic));
+  });
+
+  document.getElementById('btnAskAssistant').addEventListener('click', async () => {
+    const input = document.getElementById('assistantPromptInput');
+    const topic = document.querySelector('.assistant-topic.active')?.dataset.topic || 'navigation';
+    if (!input) return;
+
+    const value = input.value.trim();
+    if (!value) {
+      addAssistantMessage('Please ask a question such as "Where is the quiet lounge?" or "How do I reach the nearest exit?"');
+      return;
+    }
+
+    addAssistantMessage(value, true);
+    input.value = '';
+
+    const typingEl = gemini.hasKey() ? null : addTypingIndicator();
+    const answer = await getAiResponse(topic, value);
+    if (typingEl) typingEl.remove();
+
+    // Only add message if not already streamed into chat
+    if (answer !== '__STREAMED__') {
+      addAssistantMessage(answer);
+    }
+  });
+
+  document.getElementById('assistantPromptInput').addEventListener('keydown', async (event) => {
+    if (event.key === 'Enter') {
+      await document.getElementById('btnAskAssistant').click();
+    }
+  });
+
+  function renderScheduleList() {
+    const listEl = document.getElementById('scheduleListContainer');
+    if (!listEl) return;
+
+    const baseSchedule = [
+      {
+        id: 'main_keynote',
+        title: 'Opening Keynote: Autonomous Agentic Era',
+        meta: 'Grand Auditorium (Main 1)',
+        time: '11:30 AM',
+        tag: 'Live',
+        category: 'main_event'
+      },
+      {
+        id: 'main_stage2',
+        title: 'Tech Spotlight: Low-Power Edge Computing',
+        meta: 'Stage 2',
+        time: '1:00 PM',
+        tag: 'Upcoming',
+        category: 'main_event'
+      },
+      {
+        id: 'ws_room_a',
+        title: 'Workshop A: Hands-on AI Workflows',
+        meta: 'Workshop Room A',
+        time: '2:00 PM',
+        tag: 'Registration Open',
+        category: 'small_event'
+      },
+      {
+        id: 'food_coffee',
+        title: 'Artisan Espresso Bar',
+        meta: 'Food Court',
+        time: 'All day',
+        tag: 'Popular',
+        category: 'food'
+      },
+      {
+        id: 'buff_quiet',
+        title: 'Quiet Lounge Recharge',
+        meta: 'Sensory-friendly room',
+        time: '12:00 PM',
+        tag: 'Calm zone',
+        category: 'buffer'
+      }
+    ];
+
+    let recommendedItems = baseSchedule;
+    if (userProfile.interests.size > 0 || userProfile.assistance.size > 0) {
+      const preferred = new Set(userProfile.interests);
+      if (userProfile.assistance.has('quiet_space')) preferred.add('buffer');
+      if (userProfile.assistance.has('wheelchair')) preferred.add('main_event');
+
+      recommendedItems = baseSchedule.filter((item) => preferred.has(item.category));
+      if (recommendedItems.length === 0) {
+        recommendedItems = baseSchedule.slice(0, 3);
+      }
+    }
+
+    const isPersonalized = userProfile.interests.size > 0 || userProfile.assistance.size > 0;
+    listEl.innerHTML = recommendedItems.map((item) => `
+      <div class="schedule-item">
+        <div>
+          <strong class="${isPersonalized ? 'text-sky-300' : 'text-slate-200'} text-xs">${item.title}</strong>
+          <div class="text-2xs text-slate-400">${item.meta} • ${item.time}</div>
+        </div>
+        <span class="badge-sm ${isPersonalized ? 'text-emerald-400' : ''}">${isPersonalized ? 'For You' : item.tag}</span>
+      </div>
+    `).join('');
+
+    if (isPersonalized) {
+      const note = document.createElement('div');
+      note.className = 'p-2 mt-3 bg-sky-950/30 border border-sky-500/40 rounded text-2xs text-sky-200';
+      const supportText = userProfile.assistance.has('wheelchair') ? ' Step-free routing enabled.' : '';
+      note.textContent = `Personalized result: based on your selected interests and support needs.${supportText}`;
+      listEl.appendChild(note);
+    }
+  }
+
+  // 3. Navigation Path Calculation & Route Rendering
+  function calculateAndDisplayRoute(targetNodeId) {
+    renderer.targetNodeId = targetNodeId;
+    renderer.isWheelchairMode = isWheelchairMode; // Sync wheelchair mode to renderer
+    const startNodeId = renderer.currentAnchor;
+
+    const route = pathfinder.findPath(startNodeId, targetNodeId, {
+      wheelchairOnly: isWheelchairMode,
+      blockedEdgeIds: renderer.blockedEdgeIds
+    });
+
+    const banner = document.getElementById('navBanner');
+    const instructionEl = document.getElementById('navInstruction');
+    const distEl = document.getElementById('navDistance');
+    const timeEl = document.getElementById('navTime');
+
+    // Nav banner colour: green for wheelchair/step-free, default blue otherwise
+    if (isWheelchairMode) {
+      banner.style.background = 'linear-gradient(90deg, #15803d, #16a34a)';
+    } else {
+      banner.style.background = '';
+    }
+
+    if (!route) {
+      renderer.activeRoute = null;
+      banner.classList.remove('hidden');
+      instructionEl.textContent = isWheelchairMode
+        ? '♿ No step-free route available (Elevator required).'
+        : 'All connecting hallways currently blocked.';
+      distEl.textContent = 'Blocked';
+      timeEl.textContent = 'N/A';
+      alerts.triggerEmergencyAlert('No route available');
+      return;
+    }
+
+    renderer.activeRoute = route.path;
+    banner.classList.remove('hidden');
+    const firstInstruction = route.instructions[0] || 'Proceed to destination';
+    instructionEl.textContent = isWheelchairMode
+      ? `♿ Step-Free Route Active — ${firstInstruction}`
+      : firstInstruction;
+    distEl.textContent = `${route.distance}m`;
+    timeEl.textContent = `~${Math.ceil(route.estimatedSeconds / 60)} min (${route.estimatedSeconds}s)`;
+
+    // Eyes-up alert
+    alerts.triggerTurnAlert(firstInstruction);
+  }
+
+  window.appInstance = {
+    calculateAndDisplayRoute,
+    get activeTarget() { return renderer.targetNodeId; }
+  };
+
+  // 4. UI Bindings & Tab Switching
+  const tabAttendee = document.getElementById('tabAttendee');
+  // Organizer Mode Authorization State
+  let isOrganizerAuthorized = false;
+  const VALID_ORGANIZER_CODES = ['EVENT2026', '7700', 'ADMIN', 'OP2026'];
+
+  const modalOrganizerAuth = document.getElementById('modalOrganizerAuth');
+  const organizerPasscodeInput = document.getElementById('organizerPasscodeInput');
+  const authErrorMsg = document.getElementById('authErrorMsg');
+  const btnSubmitOrganizerAuth = document.getElementById('btnSubmitOrganizerAuth');
+  const btnLockOrganizer = document.getElementById('btnLockOrganizer');
+
+  function switchToOrganizerView() {
+    tabOrganizer.classList.add('active');
+    tabAttendee.classList.remove('active');
+    organizerView.classList.remove('hidden');
+    attendeeView.classList.add('hidden');
+    alerts.playChirp(880, 0.15);
+  }
+
+  function switchToAttendeeView() {
+    tabAttendee.classList.add('active');
+    tabOrganizer.classList.remove('active');
+    attendeeView.classList.remove('hidden');
+    organizerView.classList.add('hidden');
+    renderer.initCanvasSize();
+    renderer.render();
+  }
+
+  tabAttendee.addEventListener('click', switchToAttendeeView);
+
+  tabOrganizer.addEventListener('click', () => {
+    if (isOrganizerAuthorized) {
+      switchToOrganizerView();
+    } else {
+      // Require special code
+      modalOrganizerAuth.classList.remove('hidden');
+      authErrorMsg.classList.add('hidden');
+      organizerPasscodeInput.value = '';
+      organizerPasscodeInput.focus();
+    }
+  });
+
+  function validateAndUnlockOrganizer() {
+    const entered = organizerPasscodeInput.value.trim().toUpperCase();
+    if (VALID_ORGANIZER_CODES.includes(entered)) {
+      isOrganizerAuthorized = true;
+      authErrorMsg.classList.add('hidden');
+      modalOrganizerAuth.classList.add('hidden');
+      switchToOrganizerView();
+      showTicker('🔓 Organizer Command Center Unlocked. Welcome, Coordinator.');
+    } else {
+      authErrorMsg.classList.remove('hidden');
+      alerts.triggerEmergencyAlert('Access Denied');
+      organizerPasscodeInput.style.borderColor = '#f43f5e';
+      setTimeout(() => { organizerPasscodeInput.style.borderColor = ''; }, 1500);
+    }
+  }
+
+  if (btnSubmitOrganizerAuth) {
+    btnSubmitOrganizerAuth.addEventListener('click', validateAndUnlockOrganizer);
+  }
+
+  if (organizerPasscodeInput) {
+    organizerPasscodeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') validateAndUnlockOrganizer();
+    });
+  }
+
+  // Demo Quick-Fill Buttons
+  const btnFillPin = document.getElementById('btnQuickFillPin');
+  if (btnFillPin) {
+    btnFillPin.addEventListener('click', () => {
+      organizerPasscodeInput.value = 'EVENT2026';
+      authErrorMsg.classList.add('hidden');
+    });
+  }
+
+  const btnFillNum = document.getElementById('btnQuickFillNumeric');
+  if (btnFillNum) {
+    btnFillNum.addEventListener('click', () => {
+      organizerPasscodeInput.value = '7700';
+      authErrorMsg.classList.add('hidden');
+    });
+  }
+
+  // Lock Console
+  if (btnLockOrganizer) {
+    btnLockOrganizer.addEventListener('click', () => {
+      isOrganizerAuthorized = false;
+      switchToAttendeeView();
+      showTicker('🔒 Organizer Console Locked. Returned to Attendee Mode.');
+    });
+  }
+
+  // Category Filter Pills
+  document.querySelectorAll('.filter-pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.filter-pill').forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+      const cat = pill.getAttribute('data-cat');
+      renderer.categoryFilter = cat;
+      renderer.render();
+    });
+  });
+
+  // Map Zoom & Center Controls
+  document.getElementById('btnZoomIn').addEventListener('click', () => renderer.zoomIn());
+  document.getElementById('btnZoomOut').addEventListener('click', () => renderer.zoomOut());
+  document.getElementById('btnCenterMe').addEventListener('click', () => {
+    renderer.centerOnNode(renderer.currentAnchor);
+  });
+
+  // Start Navigation Button from Modal
+  document.getElementById('btnStartNavigation').addEventListener('click', () => {
+    if (activeTargetNode) {
+      document.getElementById('modalNodeInfo').classList.add('hidden');
+      calculateAndDisplayRoute(activeTargetNode.id);
+    }
+  });
+
+  // Cancel Active Route
+  document.getElementById('btnCancelNav').addEventListener('click', () => {
+    renderer.activeRoute = null;
+    renderer.targetNodeId = null;
+    document.getElementById('navBanner').classList.add('hidden');
+  });
+
+  // Accessibility Step-Free Toggle
+  const btnAccessibility = document.getElementById('btnToggleAccessibility');
+  const accessibilityLabel = document.getElementById('accessibilityLabel');
+  btnAccessibility.addEventListener('click', () => {
+    isWheelchairMode = !isWheelchairMode;
+    renderer.isWheelchairMode = isWheelchairMode; // Keep renderer in sync immediately
+    btnAccessibility.classList.toggle('active', isWheelchairMode);
+    accessibilityLabel.textContent = `Step-Free: ${isWheelchairMode ? 'ON ♿' : 'OFF'}`;
+    alerts.playChirp(isWheelchairMode ? 900 : 450, 0.15);
+
+    if (renderer.targetNodeId) {
+      calculateAndDisplayRoute(renderer.targetNodeId);
+    } else {
+      // Still refresh map so stair badges update
+      renderer.render();
+    }
+  });
+
+  // 5. Anchor Input Modals
+  const modalCodeInput = document.getElementById('modalCodeInput');
+  const anchorTextInput = document.getElementById('anchorTextInput');
+  document.getElementById('btnOpenCodeInput').addEventListener('click', () => {
+    modalCodeInput.classList.remove('hidden');
+    anchorTextInput.value = '';
+    anchorTextInput.focus();
+  });
+
+  document.getElementById('btnConfirmAnchorCode').addEventListener('click', () => {
+    const code = anchorTextInput.value;
+    if (anchorEngine.locateByCode(code)) {
+      modalCodeInput.classList.add('hidden');
+      alerts.playChirp(880, 0.15);
+    } else {
+      alert(`Pillar code "${code}" not found. Try A1, B4, C2, etc.`);
+    }
+  });
+
+  // Quick code buttons in modal
+  document.querySelectorAll('.quick-code-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-code');
+      anchorEngine.locateByCode(code);
+      modalCodeInput.classList.add('hidden');
+      document.getElementById('modalQRScanner').classList.add('hidden');
+      alerts.playChirp(880, 0.15);
+    });
+  });
+
+  // QR Scanner Modal
+  const modalQRScanner = document.getElementById('modalQRScanner');
+  document.getElementById('btnOpenScanner').addEventListener('click', () => {
+    modalQRScanner.classList.remove('hidden');
+  });
+
+  // 6. Flock Mode Modal & Failover Simulation
+  const modalFlock = document.getElementById('modalFlockMode');
+  document.getElementById('btnFlockMode').addEventListener('click', () => {
+    modalFlock.classList.remove('hidden');
+    renderFlockUI();
+  });
+
+  function renderFlockUI() {
+    const listEl = document.getElementById('flockMembersList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    flockManager.members.forEach((m) => {
+      const item = document.createElement('div');
+      item.className = 'flock-member-item';
+      item.innerHTML = `
+        <div>
+          <strong class="${m.isLeader ? 'text-sky-400 font-bold' : 'text-slate-200'}">
+            ${m.isLeader ? '👑 ' : ''}${m.name}
+          </strong>
+          <span class="text-2xs text-slate-400 ml-1">(${m.status === 'offline_lost' ? 'DISCONNECTED' : 'Pillar ' + m.anchor})</span>
+        </div>
+        <div class="text-right">
+          <span class="text-2xs ${m.distanceToLeader > 35 ? 'text-rose-400 font-bold' : 'text-slate-300'}">
+            ${m.isLeader ? 'Lead' : m.distanceToLeader + 'm away'}
+          </span>
+          <span class="text-2xs ${m.battery < 15 ? 'text-rose-400 font-bold' : 'text-slate-400'} ml-2">
+            🔋${m.battery}%
+          </span>
+        </div>
+      `;
+      listEl.appendChild(item);
+    });
+
+    if (flockManager.lastKnownStrayedLocation) {
+      const note = document.createElement('div');
+      note.className = 'p-2 mt-2 bg-rose-950/40 border border-rose-500/40 rounded text-xs text-rose-300';
+      note.innerHTML = `📍 <strong>Saved Pin of Strayed Member (${flockManager.strayedMemberName}):</strong> Pillar ${flockManager.lastKnownStrayedLocation}`;
+      listEl.appendChild(note);
+    }
+  }
+
+  document.getElementById('btnSimLeaderStray').addEventListener('click', () => {
+    flockManager.simulateLeaderStray();
+  });
+
+  document.getElementById('btnSimLowBattery').addEventListener('click', () => {
+    flockManager.simulateLowBattery();
+  });
+
+  document.getElementById('btnSimTorchPass').addEventListener('click', () => {
+    flockManager.executeFailover();
+  });
+
+  // 7. Priority Accessibility SOS Modal
+  const modalSOS = document.getElementById('modalSOS');
+  document.getElementById('btnEmergencySOS').addEventListener('click', () => {
+    modalSOS.classList.remove('hidden');
+  });
+
+  document.getElementById('btnSubmitSOSTicket').addEventListener('click', () => {
+    const needType = document.getElementById('sosNeedSelect').value;
+    const currentLoc = anchorEngine.currentCode;
+    const ticket = accessibilityDesk.createTicket(needType, currentLoc);
+
+    modalSOS.classList.add('hidden');
+    alerts.triggerEmergencyAlert('Ticket submitted');
+    showTicker(`🚨 REQUEST LOGGED [${ticket.id}]: Floor steward dispatched to Pillar ${currentLoc}!`);
+  });
+
+  // 8. Announcement Ticker
+  const tickerEl = document.getElementById('announcementTicker');
+  const tickerText = document.getElementById('tickerText');
+  document.getElementById('btnCloseTicker').addEventListener('click', () => {
+    tickerEl.classList.add('hidden');
+  });
+
+  function showTicker(msg) {
+    tickerText.textContent = msg;
+    tickerEl.classList.remove('hidden');
+  }
+
+  // 9. Survey + Schedule Modal
+  const modalSurvey = document.getElementById('modalSurvey');
+  const modalSchedule = document.getElementById('modalSchedule');
+
+  document.getElementById('btnOpenSurvey').addEventListener('click', () => {
+    populateSurveyFromProfile();
+    openSurveyModal();
+  });
+
+  document.getElementById('btnSaveSurvey').addEventListener('click', saveSurveyPreferences);
+  document.getElementById('btnSkipSurvey').addEventListener('click', () => {
+    closeSurveyModal();
+    renderScheduleList();
+  });
+
+  document.getElementById('btnOpenSchedule').addEventListener('click', () => {
+    modalSchedule.classList.remove('hidden');
+    renderScheduleList();
+  });
+
+  // Generic Modal Close handler
+  document.querySelectorAll('[data-close]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const modalId = btn.getAttribute('data-close');
+      const targetModal = document.getElementById(modalId);
+      if (targetModal) targetModal.classList.add('hidden');
+    });
+  });
+
+  // Default orient to Pillar B4
+  anchorEngine.locateByCode('B4');
+});
