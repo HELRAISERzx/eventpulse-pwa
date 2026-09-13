@@ -709,9 +709,21 @@ document.addEventListener('DOMContentLoaded', () => {
     get activeTarget() { return renderer.targetNodeId; }
   };
 
-  // 4. UI Bindings & Tab Switching
-  const tabAttendee = document.getElementById('tabAttendee');
-  // Organizer Mode Authorization State
+  // 4. Multi-Page Navigation & View Router
+  const viewPanels = {
+    home: document.getElementById('viewHome'),
+    map: document.getElementById('attendeeView'),
+    features: document.getElementById('viewFeatures'),
+    organizer: document.getElementById('organizerView')
+  };
+
+  const navBtns = {
+    home: document.getElementById('navBtnHome'),
+    map: document.getElementById('tabAttendee'),
+    features: document.getElementById('navBtnFeatures'),
+    organizer: document.getElementById('tabOrganizer')
+  };
+
   let isOrganizerAuthorized = false;
   const VALID_ORGANIZER_CODES = ['EVENT2026', '7700', 'ADMIN', 'OP2026'];
 
@@ -721,28 +733,182 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSubmitOrganizerAuth = document.getElementById('btnSubmitOrganizerAuth');
   const btnLockOrganizer = document.getElementById('btnLockOrganizer');
 
+  function switchView(targetKey, skipHash = false) {
+    if (targetKey === 'organizer' && !isOrganizerAuthorized) {
+      if (modalOrganizerAuth) {
+        modalOrganizerAuth.classList.remove('hidden');
+        if (authErrorMsg) authErrorMsg.classList.add('hidden');
+        if (organizerPasscodeInput) {
+          organizerPasscodeInput.value = '';
+          organizerPasscodeInput.focus();
+        }
+      }
+      return;
+    }
+
+    // Toggle panels
+    Object.entries(viewPanels).forEach(([key, panel]) => {
+      if (!panel) return;
+      if (key === targetKey) {
+        panel.classList.remove('hidden');
+        panel.classList.add('active');
+      } else {
+        panel.classList.add('hidden');
+        panel.classList.remove('active');
+      }
+    });
+
+    // Toggle nav buttons
+    Object.entries(navBtns).forEach(([key, btn]) => {
+      if (!btn) return;
+      if (key === targetKey) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    if (targetKey === 'map') {
+      renderer.isOrganizerMode = false;
+      setTimeout(() => {
+        renderer.initCanvasSize();
+        renderer.render();
+      }, 50);
+    } else if (targetKey === 'organizer') {
+      renderer.isOrganizerMode = true;
+      renderer.render();
+      if (organizer) organizer.renderZoneCapacities();
+      alerts.playChirp(880, 0.15);
+    }
+
+    if (!skipHash) {
+      try {
+        window.location.hash = targetKey;
+      } catch (_) {}
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   function switchToOrganizerView() {
-    tabOrganizer.classList.add('active');
-    tabAttendee.classList.remove('active');
-    organizerView.classList.remove('hidden');
-    attendeeView.classList.add('hidden');
-    renderer.isOrganizerMode = true;
-    renderer.render();
-    if (organizer) organizer.renderZoneCapacities();
-    alerts.playChirp(880, 0.15);
+    switchView('organizer');
   }
 
   function switchToAttendeeView() {
-    tabAttendee.classList.add('active');
-    tabOrganizer.classList.remove('active');
-    attendeeView.classList.remove('hidden');
-    organizerView.classList.add('hidden');
-    renderer.isOrganizerMode = false;
-    renderer.initCanvasSize();
-    renderer.render();
+    switchView('map');
   }
 
-  tabAttendee.addEventListener('click', switchToAttendeeView);
+  // Top Nav Click Listeners
+  if (navBtns.home) navBtns.home.addEventListener('click', () => switchView('home'));
+  if (navBtns.map) navBtns.map.addEventListener('click', () => switchView('map'));
+  if (navBtns.features) navBtns.features.addEventListener('click', () => switchView('features'));
+  if (navBtns.organizer) navBtns.organizer.addEventListener('click', () => switchView('organizer'));
+
+  // Header Brand & Launch Buttons
+  const brandHomeLink = document.getElementById('brandHomeLink');
+  if (brandHomeLink) brandHomeLink.addEventListener('click', () => switchView('home'));
+
+  const btnHeaderLaunchMap = document.getElementById('btnHeaderLaunchMap');
+  if (btnHeaderLaunchMap) btnHeaderLaunchMap.addEventListener('click', () => switchView('map'));
+
+  // Landing Home Page CTA Buttons
+  const btnLandingLaunchMap = document.getElementById('btnLandingLaunchMap');
+  if (btnLandingLaunchMap) btnLandingLaunchMap.addEventListener('click', () => switchView('map'));
+
+  const btnLandingBottomLaunch = document.getElementById('btnLandingBottomLaunch');
+  if (btnLandingBottomLaunch) btnLandingBottomLaunch.addEventListener('click', () => switchView('map'));
+
+  const btnFeaturesToMap = document.getElementById('btnFeaturesToMap');
+  if (btnFeaturesToMap) btnFeaturesToMap.addEventListener('click', () => switchView('map'));
+
+  const btnLandingStepFree = document.getElementById('btnLandingStepFree');
+  if (btnLandingStepFree) {
+    btnLandingStepFree.addEventListener('click', () => {
+      isWheelchairMode = true;
+      renderer.isWheelchairMode = true;
+      const btnAcc = document.getElementById('btnToggleAccessibility');
+      const accLabel = document.getElementById('accessibilityLabel');
+      if (btnAcc) btnAcc.classList.add('active');
+      if (accLabel) accLabel.textContent = 'Step-Free: ON ♿';
+      switchView('map');
+      alerts.triggerGlanceCard('♿ Step-Free Mode Activated', 'Navigating exclusively via elevators and flat corridors.', 'emerald');
+    });
+  }
+
+  const btnLandingAiGuide = document.getElementById('btnLandingAiGuide');
+  if (btnLandingAiGuide) {
+    btnLandingAiGuide.addEventListener('click', () => {
+      const drawerCopilot = document.getElementById('drawerCopilot');
+      if (drawerCopilot) {
+        drawerCopilot.classList.remove('hidden');
+        drawerCopilot.classList.add('active');
+      }
+    });
+  }
+
+  const btnLandingOrganizer = document.getElementById('btnLandingOrganizer');
+  if (btnLandingOrganizer) {
+    btnLandingOrganizer.addEventListener('click', () => switchView('organizer'));
+  }
+
+  // Feature Card & Deep-link Action Triggers ([data-jump])
+  document.querySelectorAll('[data-jump]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const action = el.getAttribute('data-jump');
+      if (action === 'map-anchors') {
+        switchView('map');
+        const modalCode = document.getElementById('modalCodeInput');
+        if (modalCode) modalCode.classList.remove('hidden');
+      } else if (action === 'map-stepfree') {
+        isWheelchairMode = true;
+        renderer.isWheelchairMode = true;
+        const btnAcc = document.getElementById('btnToggleAccessibility');
+        const accLabel = document.getElementById('accessibilityLabel');
+        if (btnAcc) btnAcc.classList.add('active');
+        if (accLabel) accLabel.textContent = 'Step-Free: ON ♿';
+        switchView('map');
+      } else if (action === 'ops-reroute') {
+        switchView('organizer');
+      } else if (action === 'open-gemini') {
+        const drawerCopilot = document.getElementById('drawerCopilot');
+        if (drawerCopilot) {
+          drawerCopilot.classList.remove('hidden');
+          drawerCopilot.classList.add('active');
+        }
+      } else if (action === 'open-flock') {
+        const modalFlock = document.getElementById('modalFlockMode');
+        if (modalFlock) {
+          modalFlock.classList.remove('hidden');
+          modalFlock.classList.add('active');
+          renderFlockUI();
+        }
+      }
+    });
+  });
+
+  // URL Hash Syncing for Direct Link Sharing
+  function handleHashRoute() {
+    const hash = window.location.hash.replace('#', '').toLowerCase();
+    if (hash === 'map' || hash === 'attendee') {
+      switchView('map', true);
+    } else if (hash === 'features' || hash === 'innovations') {
+      switchView('features', true);
+    } else if (hash === 'organizer' || hash === 'ops') {
+      if (isOrganizerAuthorized) {
+        switchView('organizer', true);
+      } else {
+        switchView('home', true);
+        if (modalOrganizerAuth) modalOrganizerAuth.classList.remove('hidden');
+      }
+    } else {
+      switchView('home', true);
+    }
+  }
+
+  window.addEventListener('hashchange', handleHashRoute);
+  if (window.location.hash && window.location.hash !== '#home') {
+    handleHashRoute();
+  }
 
   // Attendee Quick Action Floating Navigation Chips
   document.querySelectorAll('.quick-nav-chip').forEach((chip) => {
@@ -782,17 +948,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  tabOrganizer.addEventListener('click', () => {
-    if (isOrganizerAuthorized) {
-      switchToOrganizerView();
-    } else {
-      // Require special code
-      modalOrganizerAuth.classList.remove('hidden');
-      authErrorMsg.classList.add('hidden');
-      organizerPasscodeInput.value = '';
-      organizerPasscodeInput.focus();
-    }
-  });
+
 
   function validateAndUnlockOrganizer() {
     const entered = organizerPasscodeInput.value.trim().toUpperCase();
@@ -841,8 +997,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnLockOrganizer) {
     btnLockOrganizer.addEventListener('click', () => {
       isOrganizerAuthorized = false;
-      switchToAttendeeView();
-      showTicker('🔒 Organizer Console Locked. Returned to Attendee Mode.');
+      switchView('home');
+      showTicker('🔒 Organizer Console Locked. Returned to Home.');
     });
   }
 
