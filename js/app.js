@@ -22,10 +22,65 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeTargetNode = null;
   let isWheelchairMode = false;
 
-  // Map click handler (opens node details modal)
-  const onNodeClick = (node) => {
+  // Interactive Map Context Popover Elements
+  const popover = document.getElementById('mapContextPopover');
+  const popoverTitle = document.getElementById('popoverTitle');
+  const btnPopoverSetLocation = document.getElementById('btnPopoverSetLocation');
+  const btnPopoverNavigate = document.getElementById('btnPopoverNavigate');
+  const btnClosePopover = document.getElementById('btnClosePopover');
+
+  let popoverSelectedNode = null;
+
+  const hidePopover = () => {
+    if (popover) popover.classList.add('hidden');
+    popoverSelectedNode = null;
+  };
+
+  if (btnClosePopover) btnClosePopover.addEventListener('click', hidePopover);
+
+  if (btnPopoverSetLocation) {
+    btnPopoverSetLocation.addEventListener('click', () => {
+      if (popoverSelectedNode) {
+        if (popoverSelectedNode.isAnchor) {
+          anchorEngine.locateByCode(popoverSelectedNode.anchorCode);
+        } else {
+          // Find nearest anchor
+          const nearest = Object.values(VENUE_DATA.nodes).filter(n => n.isAnchor)
+            .sort((a, b) => Math.hypot(a.x - popoverSelectedNode.x, a.y - popoverSelectedNode.y) - Math.hypot(b.x - popoverSelectedNode.x, b.y - popoverSelectedNode.y))[0];
+          if (nearest) anchorEngine.locateByCode(nearest.anchorCode);
+        }
+      }
+      hidePopover();
+    });
+  }
+
+  if (btnPopoverNavigate) {
+    btnPopoverNavigate.addEventListener('click', () => {
+      if (popoverSelectedNode) {
+        activeTargetNode = popoverSelectedNode;
+        calculateAndDisplayRoute(popoverSelectedNode.id);
+      }
+      hidePopover();
+    });
+  }
+
+  // Map click handler (interactive popover or node details modal)
+  const onNodeClick = (node, clientX, clientY) => {
+    popoverSelectedNode = node;
+
+    // Position interactive context popover on the map canvas
+    if (popover && clientX !== undefined && clientY !== undefined) {
+      const rect = canvas.getBoundingClientRect();
+      const popX = Math.max(90, Math.min(rect.width - 90, clientX - rect.left));
+      const popY = Math.max(50, clientY - rect.top);
+      popover.style.left = `${popX}px`;
+      popover.style.top = `${popY}px`;
+      popoverTitle.textContent = node.isAnchor ? `📍 Pillar ${node.anchorCode}` : `${node.icon || '📍'} ${node.label}`;
+      popover.classList.remove('hidden');
+      return;
+    }
+
     if (node.isAnchor) {
-      // Set as current location directly if tapping an anchor
       anchorEngine.locateByCode(node.anchorCode);
       return;
     }
@@ -49,6 +104,20 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const renderer = new VenueMapRenderer(canvas, VENUE_DATA, onNodeClick);
+
+  // Wire corridor click directly on canvas in Organizer Mode
+  renderer.onCorridorClick = (edge) => {
+    if (renderer.isOrganizerMode && organizer) {
+      organizer.toggleCorridorBarrier(edge.id);
+      alerts.triggerGlanceCard(
+        `🚧 Corridor Roadblock`,
+        renderer.blockedEdgeIds.has(edge.id)
+          ? `Virtual barrier deployed on ${edge.name}. Traffic rerouting active.`
+          : `Barrier cleared on ${edge.name}. Corridor open.`,
+        'amber'
+      );
+    }
+  };
 
   // Anchor engine
   const anchorEngine = new AnchorEngine(VENUE_DATA, (code, nodeId) => {
@@ -444,11 +513,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   updateGeminiStatusBadge();
 
-  // Unified Assistant Modal Trigger (Toolbar & Floating Map Pill)
+  // Unified Assistant Drawer Trigger (Toolbar & Floating Map Pill)
   const openAssistantModal = () => {
     const modal = document.getElementById('modalAssistant');
     if (modal) {
       modal.classList.remove('hidden');
+      modal.classList.add('active');
       updateGeminiStatusBadge();
       const input = document.getElementById('assistantPromptInput');
       if (input) setTimeout(() => input.focus(), 150);
@@ -656,6 +726,9 @@ document.addEventListener('DOMContentLoaded', () => {
     tabAttendee.classList.remove('active');
     organizerView.classList.remove('hidden');
     attendeeView.classList.add('hidden');
+    renderer.isOrganizerMode = true;
+    renderer.render();
+    if (organizer) organizer.renderZoneCapacities();
     alerts.playChirp(880, 0.15);
   }
 
@@ -664,11 +737,50 @@ document.addEventListener('DOMContentLoaded', () => {
     tabOrganizer.classList.remove('active');
     attendeeView.classList.remove('hidden');
     organizerView.classList.add('hidden');
+    renderer.isOrganizerMode = false;
     renderer.initCanvasSize();
     renderer.render();
   }
 
   tabAttendee.addEventListener('click', switchToAttendeeView);
+
+  // Attendee Quick Action Floating Navigation Chips
+  document.querySelectorAll('.quick-nav-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.quick-nav-chip').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      setTimeout(() => chip.classList.remove('active'), 3000);
+
+      const action = chip.getAttribute('data-quick');
+      let targetId = null;
+
+      if (action === 'elevator') {
+        isWheelchairMode = true;
+        renderer.isWheelchairMode = true;
+        document.getElementById('accessibilityLabel').textContent = 'Step-Free: ON ♿';
+        document.getElementById('btnToggleAccessibility').classList.add('active');
+        targetId = 'serv_infodesk';
+        alerts.triggerGlanceCard('♿ Step-Free Mode Activated', 'Navigating to Central Service Hub via elevator-safe corridors.', 'emerald');
+      } else if (action === 'lounge') {
+        targetId = 'buff_quiet';
+        alerts.triggerGlanceCard('🛋️ Quiet Lounge', 'Navigating to Sensory-Friendly Quiet Buffer Lounge.', 'emerald');
+      } else if (action === 'food') {
+        targetId = 'n_b4';
+        alerts.triggerGlanceCard('🍔 Food Plaza', 'Navigating to Food Court & Dining Pavilion.', 'amber');
+      } else if (action === 'restroom') {
+        targetId = 'serv_restrooms';
+        alerts.triggerGlanceCard('🚻 Restroom Hub', 'Navigating to nearest accessible Restrooms.', 'emerald');
+      } else if (action === 'evac') {
+        targetId = 'n_a1';
+        alerts.triggerScreenStrobe('amber');
+        alerts.triggerGlanceCard('🚨 Emergency Evacuation', 'Following priority exit route to Main Concourse.', 'red');
+      }
+
+      if (targetId) {
+        calculateAndDisplayRoute(targetId);
+      }
+    });
+  });
 
   tabOrganizer.addEventListener('click', () => {
     if (isOrganizerAuthorized) {
@@ -821,10 +933,11 @@ document.addEventListener('DOMContentLoaded', () => {
     modalQRScanner.classList.remove('hidden');
   });
 
-  // 6. Flock Mode Modal & Failover Simulation
+  // 6. Flock Mode Drawer & Failover Simulation
   const modalFlock = document.getElementById('modalFlockMode');
   document.getElementById('btnFlockMode').addEventListener('click', () => {
     modalFlock.classList.remove('hidden');
+    modalFlock.classList.add('active');
     renderFlockUI();
   });
 
@@ -834,45 +947,63 @@ document.addEventListener('DOMContentLoaded', () => {
     listEl.innerHTML = '';
 
     flockManager.members.forEach((m) => {
-      const item = document.createElement('div');
-      item.className = 'flock-member-item';
-      item.innerHTML = `
-        <div>
-          <strong class="${m.isLeader ? 'text-sky-400 font-bold' : 'text-slate-200'}">
-            ${m.isLeader ? '👑 ' : ''}${m.name}
-          </strong>
-          <span class="text-2xs text-slate-400 ml-1">(${m.status === 'offline_lost' ? 'DISCONNECTED' : 'Pillar ' + m.anchor})</span>
+      const isStrayed = m.distanceToLeader > 35 || m.status === 'offline_lost';
+      const card = document.createElement('div');
+      card.className = `flock-member-card ${m.isLeader ? 'is-leader' : ''} ${isStrayed ? 'is-strayed' : ''}`;
+      
+      const badgeClass = m.isLeader ? 'leader' : isStrayed ? 'strayed' : 'ok';
+      const badgeText = m.isLeader ? '👑 LEADER' : isStrayed ? '⚠️ STRAYED' : '● SYNCED';
+      const distPercent = Math.min(100, Math.round((m.distanceToLeader / 40) * 100));
+
+      card.innerHTML = `
+        <div class="flock-card-header">
+          <div class="flock-member-info">
+            <div class="flock-avatar">${m.name.charAt(0)}</div>
+            <div>
+              <strong class="${m.isLeader ? 'text-sky-300 font-bold' : 'text-slate-200'} text-xs">${m.name}</strong>
+              <div class="text-2xs text-slate-400">Pillar ${m.anchor} • Battery ${m.battery}%</div>
+            </div>
+          </div>
+          <span class="flock-status-badge ${badgeClass}">${badgeText}</span>
         </div>
-        <div class="text-right">
-          <span class="text-2xs ${m.distanceToLeader > 35 ? 'text-rose-400 font-bold' : 'text-slate-300'}">
-            ${m.isLeader ? 'Lead' : m.distanceToLeader + 'm away'}
-          </span>
-          <span class="text-2xs ${m.battery < 15 ? 'text-rose-400 font-bold' : 'text-slate-400'} ml-2">
-            🔋${m.battery}%
-          </span>
-        </div>
+        ${!m.isLeader ? `
+          <div class="flock-meter-row mt-1">
+            <span>Distance to Leader:</span>
+            <strong class="${isStrayed ? 'text-rose-400 font-bold' : 'text-slate-300'}">${m.distanceToLeader}m / 35m max</strong>
+          </div>
+          <div class="flock-progress-bar">
+            <div class="flock-progress-fill ${isStrayed ? 'danger' : ''}" style="width: ${distPercent}%"></div>
+          </div>
+        ` : '<div class="text-2xs text-sky-400 font-semibold">Active Beacon • All flock telemetry tethered to your position</div>'}
       `;
-      listEl.appendChild(item);
+      listEl.appendChild(card);
     });
 
-    if (flockManager.lastKnownStrayedLocation) {
-      const note = document.createElement('div');
-      note.className = 'p-2 mt-2 bg-rose-950/40 border border-rose-500/40 rounded text-xs text-rose-300';
-      note.innerHTML = `📍 <strong>Saved Pin of Strayed Member (${flockManager.strayedMemberName}):</strong> Pillar ${flockManager.lastKnownStrayedLocation}`;
-      listEl.appendChild(note);
+    const lostPinContainer = document.getElementById('flockLostPinContainer');
+    const lostPinText = document.getElementById('flockLostPinText');
+    if (lostPinContainer && lostPinText) {
+      if (flockManager.lastKnownStrayedLocation) {
+        lostPinContainer.classList.remove('hidden');
+        lostPinText.textContent = `${flockManager.strayedMemberName} strayed at Pillar ${flockManager.lastKnownStrayedLocation}. Direct waypoint pinned on map.`;
+      } else {
+        lostPinContainer.classList.add('hidden');
+      }
     }
   }
 
   document.getElementById('btnSimLeaderStray').addEventListener('click', () => {
     flockManager.simulateLeaderStray();
+    renderFlockUI();
   });
 
   document.getElementById('btnSimLowBattery').addEventListener('click', () => {
     flockManager.simulateLowBattery();
+    renderFlockUI();
   });
 
   document.getElementById('btnSimTorchPass').addEventListener('click', () => {
     flockManager.executeFailover();
+    renderFlockUI();
   });
 
   // 7. Priority Accessibility SOS Modal
@@ -923,12 +1054,25 @@ document.addEventListener('DOMContentLoaded', () => {
     renderScheduleList();
   });
 
-  // Generic Modal Close handler
+  // Generic Modal & Drawer Close handler
   document.querySelectorAll('[data-close]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const modalId = btn.getAttribute('data-close');
       const targetModal = document.getElementById(modalId);
-      if (targetModal) targetModal.classList.add('hidden');
+      if (targetModal) {
+        targetModal.classList.add('hidden');
+        targetModal.classList.remove('active');
+      }
+    });
+  });
+
+  // Clicking on drawer backdrop closes drawer
+  document.querySelectorAll('.drawer-backdrop').forEach((backdrop) => {
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        backdrop.classList.add('hidden');
+        backdrop.classList.remove('active');
+      }
     });
   });
 

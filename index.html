@@ -108,7 +108,28 @@
 
       <!-- Interactive 2D Venue Canvas Viewport -->
       <div class="map-viewport-wrapper">
+        <!-- Attendee Quick Action Floating Chips -->
+        <nav class="quick-nav-bar" id="attendeeQuickNavBar" aria-label="Quick Actions">
+          <button class="quick-nav-chip" data-quick="elevator">🛗 Find Elevator</button>
+          <button class="quick-nav-chip" data-quick="lounge">🛋️ Quiet Lounge</button>
+          <button class="quick-nav-chip" data-quick="food">🍔 Food Plaza</button>
+          <button class="quick-nav-chip" data-quick="restroom">🚻 Restroom Hub</button>
+          <button class="quick-nav-chip evac-chip" data-quick="evac">🚨 Emergency Exit</button>
+        </nav>
+
         <canvas id="venueCanvas" class="venue-canvas"></canvas>
+
+        <!-- Interactive Map Context Popover (Appears on clicking pillars/nodes) -->
+        <div id="mapContextPopover" class="map-interactive-popover hidden">
+          <div class="popover-header">
+            <span id="popoverTitle">Pillar B4</span>
+            <button id="btnClosePopover" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;font-size:12px;">✕</button>
+          </div>
+          <div class="popover-actions">
+            <button id="btnPopoverSetLocation" class="btn-popover-action primary">📍 Set As Here</button>
+            <button id="btnPopoverNavigate" class="btn-popover-action secondary">🧭 Navigate</button>
+          </div>
+        </div>
 
         <!-- Floating Map Controls -->
         <div class="map-overlay-controls">
@@ -201,6 +222,24 @@
           <div class="ops-stat-card">
             <div class="stat-num text-rose-400" id="orgPendingTickets">1</div>
             <div class="stat-label">Open Assistance Requests</div>
+          </div>
+        </div>
+
+        <!-- Live Zone Capacity Radar & Simulation Sliders -->
+        <div class="ops-card">
+          <div class="ops-card-header">
+            <h3>📊 Live Zone Capacity Radar & Simulation</h3>
+            <span class="badge-sm text-sky-300">Interactive Sliders</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-3">
+            Drag any slider to simulate crowd density. Visual alert states trigger at <strong>85% (Warning Amber)</strong> and <strong>95% (Critical Red Hazard)</strong> across map rooms in real time.
+          </p>
+          <div class="capacity-grid" id="zoneCapacityList">
+            <!-- Dynamically rendered capacity sliders -->
+          </div>
+          <div class="flex gap-2 mt-3">
+            <button id="btnSimulateKeynoteSurge" class="btn btn-subtle flex-1 text-xs">🚨 Simulate Keynote Surge (98%)</button>
+            <button id="btnResetZoneCapacities" class="btn btn-subtle flex-1 text-xs">✓ Reset All Nominal</button>
           </div>
         </div>
 
@@ -407,42 +446,47 @@
     </div>
   </div>
 
-  <!-- Modal: Flock Mode (Group Tethering & Leader Failover) -->
-  <div id="modalFlockMode" class="modal-backdrop hidden">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>👥 Flock Mode (Group Tether)</h3>
-        <button class="modal-close" data-close="modalFlockMode">✕</button>
+  <!-- Drawer: Flock Mode (Interactive Bottom Sheet) -->
+  <div id="modalFlockMode" class="drawer-backdrop">
+    <aside id="drawerFlock" class="drawer-panel drawer-bottom">
+      <div class="drawer-drag-handle"></div>
+      <div class="drawer-header">
+        <div class="drawer-title">
+          <span>👥</span>
+          <span>Flock Mode — Group Tethering</span>
+        </div>
+        <button class="drawer-close-btn" data-close="modalFlockMode">✕</button>
       </div>
 
-      <div class="flock-status-card mb-3">
-        <div class="flock-header-row">
-          <div>
-            <span class="text-2xs text-slate-400">ROOM CODE:</span>
-            <span id="flockRoomCode" class="font-bold text-sky-400 text-sm ml-1">FLOCK7</span>
+      <div class="drawer-body">
+        <div class="flock-status-card mb-2">
+          <div class="flock-header-row">
+            <div>
+              <span class="text-2xs text-slate-400">ROOM CODE:</span>
+              <span id="flockRoomCode" class="font-bold text-sky-400 text-sm ml-1">FLOCK7</span>
+            </div>
+            <div class="badge-sm" id="flockRoleBadge">👑 LEADER</div>
           </div>
-          <div class="badge-sm" id="flockRoleBadge">👑 LEADER</div>
         </div>
-        
-        <div class="flock-members-list mt-2" id="flockMembersList">
+
+        <div class="flock-grid-list" id="flockMembersList">
           <!-- Populated dynamically with leader & members -->
         </div>
-      </div>
 
-      <!-- Test simulation actions for Leader Failover -->
-      <div class="flock-sim-panel">
-        <h4 class="text-xs font-bold text-slate-300 mb-1">Test Safety & Failover Scenarios:</h4>
-        <div class="sim-actions-grid">
-          <button id="btnSimLeaderStray" class="btn-xs btn-subtle">⚠️ Simulate Leader Stray (>35m)</button>
-          <button id="btnSimLowBattery" class="btn-xs btn-subtle">🔋 Simulate Leader Battery &lt;10%</button>
-          <button id="btnSimTorchPass" class="btn-xs btn-primary">👑 Auto-Pass Torch to Member 2</button>
+        <div id="flockLostPinContainer" class="hidden p-2.5 bg-rose-950/40 border border-rose-500/50 rounded-lg mt-2">
+          <span class="text-2xs font-bold text-rose-300 block">📍 LAST KNOWN PIN:</span>
+          <span id="flockLostPinText" class="text-2xs text-slate-200">Member strayed near Pillar B1</span>
         </div>
       </div>
 
-      <div class="modal-footer mt-3">
-        <button class="btn btn-subtle w-full" data-close="modalFlockMode">Close</button>
+      <div class="drawer-footer">
+        <div class="sim-actions-grid">
+          <button id="btnSimLeaderStray" class="btn-xs btn-subtle">⚠️ Simulate Stray (&gt;35m)</button>
+          <button id="btnSimLowBattery" class="btn-xs btn-subtle">🔋 Simulate Low Battery (&lt;10%)</button>
+          <button id="btnSimTorchPass" class="btn-xs btn-primary">👑 Pass Torch to Member 2</button>
+        </div>
       </div>
-    </div>
+    </aside>
   </div>
 
   <!-- Modal: Priority Accessibility & Emergency SOS Ticket -->
@@ -545,44 +589,51 @@
     </div>
   </div>
 
-  <!-- Modal: Trusted AI Event Assistant (Gemini-powered) -->
-  <div id="modalAssistant" class="modal-backdrop hidden">
-    <div class="modal-card assistant-card">
-      <div class="modal-header">
-        <h3>🤖 EventPulse AI Guide</h3>
-        <button class="modal-close" data-close="modalAssistant">✕</button>
+  <!-- Drawer: Gemini AI Event Copilot (Slide-Out Right) -->
+  <div id="modalAssistant" class="drawer-backdrop">
+    <aside id="drawerGemini" class="drawer-panel drawer-right">
+      <div class="drawer-header">
+        <div class="drawer-title">
+          <span class="floating-ai-sparkle">✨</span>
+          <span>EventPulse AI Copilot</span>
+        </div>
+        <button class="drawer-close-btn" data-close="modalAssistant">✕</button>
       </div>
 
-      <div class="assistant-status-row">
-        <span id="geminiStatusBadge" class="assistant-status-badge">✅ Gemini AI Active</span>
-      </div>
+      <div class="drawer-body">
+        <div class="assistant-status-row">
+          <span id="geminiStatusBadge" class="assistant-status-badge">✨ Gemini 2.0 Flash • Verified Event Copilot</span>
+        </div>
 
-      <div class="assistant-topic-picker">
-        <button class="assistant-topic active" data-topic="navigation">Navigation</button>
-        <button class="assistant-topic" data-topic="emergency">Emergency</button>
-        <button class="assistant-topic" data-topic="accessibility">Accessibility</button>
-        <button class="assistant-topic" data-topic="schedule">Schedule</button>
-      </div>
+        <div class="assistant-topic-picker">
+          <button class="assistant-topic active" data-topic="navigation">Navigation</button>
+          <button class="assistant-topic" data-topic="emergency">Emergency</button>
+          <button class="assistant-topic" data-topic="accessibility">Accessibility</button>
+          <button class="assistant-topic" data-topic="schedule">Schedule</button>
+        </div>
 
-      <div class="assistant-quick-prompts">
-        <button class="quick-prompt-chip" data-prompt="Where is the food court and coffee?">🍔 Food Court</button>
-        <button class="quick-prompt-chip" data-prompt="How do I reach a step-free wheelchair route?">♿ Step-Free</button>
-        <button class="quick-prompt-chip" data-prompt="Where is the quiet lounge to rest?">🛋️ Quiet Room</button>
-        <button class="quick-prompt-chip" data-prompt="What should I do if there is an emergency or overcrowding?">🆘 Emergency</button>
-        <button class="quick-prompt-chip" data-prompt="What sessions are happening at the Main Keynote Stage?">🏛️ Keynote</button>
-      </div>
+        <div class="assistant-quick-prompts">
+          <button class="quick-prompt-chip" data-prompt="Where is the food court and coffee?">🍔 Food Court</button>
+          <button class="quick-prompt-chip" data-prompt="How do I reach a step-free wheelchair route?">♿ Step-Free</button>
+          <button class="quick-prompt-chip" data-prompt="Where is the quiet lounge to rest?">🛋️ Quiet Room</button>
+          <button class="quick-prompt-chip" data-prompt="What should I do if there is an emergency or overcrowding?">🆘 Emergency</button>
+          <button class="quick-prompt-chip" data-prompt="What sessions are happening at the Main Keynote Stage?">🏛️ Keynote</button>
+        </div>
 
-      <div class="assistant-chat" id="assistantChat">
-        <div class="assistant-message assistant-message-ai">
-          👋 Hi! I am EventPulse, powered by <strong>Gemini 2.0 Flash</strong>. I can guide you anywhere across the venue, calculate accessible step-free paths, and provide emergency safety instructions. How can I help you right now?
+        <div class="assistant-chat" id="assistantChat">
+          <div class="assistant-message assistant-message-ai">
+            👋 Hi! I am EventPulse, powered by <strong>Gemini 2.0 Flash</strong>. I can guide you anywhere across the venue, calculate accessible step-free paths, and provide emergency safety instructions. How can I help you right now?
+          </div>
         </div>
       </div>
 
-      <div class="assistant-input-row">
-        <input id="assistantPromptInput" class="form-input" type="text" placeholder="Ask: Where is the quiet lounge?" maxlength="200">
-        <button id="btnAskAssistant" class="btn btn-primary">Send</button>
+      <div class="drawer-footer">
+        <div class="assistant-input-row">
+          <input id="assistantPromptInput" class="form-input" type="text" placeholder="Ask: Where is the quiet lounge?" maxlength="200">
+          <button id="btnAskAssistant" class="btn btn-primary">Send</button>
+        </div>
       </div>
-    </div>
+    </aside>
   </div>
 
   <!-- Modal: Schedule List -->
@@ -634,16 +685,16 @@
   </div>
 
   <!-- Scripts with Cache Busting -->
-  <script src="js/map-data.js?v=3.2"></script>
-  <script src="js/pathfinder.js?v=3.2"></script>
-  <script src="js/glance-alerts.js?v=3.2"></script>
-  <script src="js/map-renderer.js?v=3.2"></script>
-  <script src="js/anchor-engine.js?v=3.2"></script>
-  <script src="js/flock-manager.js?v=3.2"></script>
-  <script src="js/accessibility-desk.js?v=3.2"></script>
-  <script src="js/organizer.js?v=3.2"></script>
-  <script src="js/gemini-client.js?v=3.2"></script>
-  <script src="js/app.js?v=3.2"></script>
+  <script src="js/map-data.js?v=4.0"></script>
+  <script src="js/pathfinder.js?v=4.0"></script>
+  <script src="js/glance-alerts.js?v=4.0"></script>
+  <script src="js/map-renderer.js?v=4.0"></script>
+  <script src="js/anchor-engine.js?v=4.0"></script>
+  <script src="js/flock-manager.js?v=4.0"></script>
+  <script src="js/accessibility-desk.js?v=4.0"></script>
+  <script src="js/organizer.js?v=4.0"></script>
+  <script src="js/gemini-client.js?v=4.0"></script>
+  <script src="js/app.js?v=4.0"></script>
 
 </body>
 </html>

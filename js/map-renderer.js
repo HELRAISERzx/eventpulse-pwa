@@ -21,6 +21,9 @@ class VenueMapRenderer {
     this.blockedEdgeIds = new Set();
     this.categoryFilter = 'all';
     this.isWheelchairMode = false;
+    this.isOrganizerMode = false;
+    this.zoneCapacities = {};
+    this.onCorridorClick = null;
 
     // Compass heading & facing direction tracking
     this.userHeadingAngle = 0;
@@ -182,19 +185,45 @@ class VenueMapRenderer {
     }
   }
 
+  distToSegment(px, py, x1, y1, x2, y2) {
+    const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+    if (l2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+  }
+
   handlePointerClick(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     const clickX = (clientX - rect.left - this.panX) / this.scale;
     const clickY = (clientY - rect.top - this.panY) / this.scale;
 
+    // 1. Check nodes first (POI or Anchor)
     for (const [id, node] of Object.entries(this.data.nodes)) {
       const dist = Math.hypot(clickX - node.x, clickY - node.y);
-      const hitRadius = node.isAnchor ? 18 : 26;
+      const hitRadius = node.isAnchor ? 20 : 26;
       if (dist <= hitRadius) {
         if (this.onNodeClick) {
-          this.onNodeClick(node);
+          this.onNodeClick(node, clientX, clientY);
         }
         return;
+      }
+    }
+
+    // 2. Check Corridors / Edges (Organizers can click directly to toggle roadblocks)
+    if (this.onCorridorClick || this.isOrganizerMode) {
+      for (const edge of this.data.edges) {
+        const n1 = this.data.nodes[edge.from];
+        const n2 = this.data.nodes[edge.to];
+        if (!n1 || !n2) continue;
+        const dist = this.distToSegment(clickX, clickY, n1.x, n1.y, n2.x, n2.y);
+        const hitWidth = Math.max((edge.width || 24) / 2 + 8, 18);
+        if (dist <= hitWidth) {
+          if (this.onCorridorClick) {
+            this.onCorridorClick(edge, clientX, clientY);
+            return;
+          }
+        }
       }
     }
   }
@@ -240,16 +269,42 @@ class VenueMapRenderer {
   // Draw defined physical rooms and exterior architectural walls
   drawRoomsAndWalls(ctx) {
     this.data.zones.forEach((z) => {
-      // Room floor fill
-      ctx.fillStyle = z.color;
-      ctx.beginPath();
-      ctx.roundRect(z.x, z.y, z.w, z.h, 10);
-      ctx.fill();
+      const cap = this.zoneCapacities[z.id] !== undefined ? this.zoneCapacities[z.id] : (z.capacity || 40);
 
-      // Solid architectural wall perimeter
-      ctx.strokeStyle = z.wallColor;
-      ctx.lineWidth = z.wallWidth || 3;
-      ctx.stroke();
+      // Room floor fill with dynamic capacity alert states
+      if (cap >= 95) {
+        // Critical danger state: pulsing red hazard
+        const pulse = (Math.sin(Date.now() / 180) + 1) / 2;
+        ctx.fillStyle = `rgba(244, 63, 94, ${0.16 + pulse * 0.16})`;
+        ctx.beginPath();
+        ctx.roundRect(z.x, z.y, z.w, z.h, 10);
+        ctx.fill();
+
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      } else if (cap >= 85) {
+        // Warning surge state: amber glow
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+        ctx.beginPath();
+        ctx.roundRect(z.x, z.y, z.w, z.h, 10);
+        ctx.fill();
+
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+      } else {
+        // Nominal room floor fill
+        ctx.fillStyle = z.color;
+        ctx.beginPath();
+        ctx.roundRect(z.x, z.y, z.w, z.h, 10);
+        ctx.fill();
+
+        // Solid architectural wall perimeter
+        ctx.strokeStyle = z.wallColor;
+        ctx.lineWidth = z.wallWidth || 3;
+        ctx.stroke();
+      }
 
       // Inner wall accent line (gives architectural depth)
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
@@ -259,15 +314,34 @@ class VenueMapRenderer {
       ctx.stroke();
 
       // Room Header Banner
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
       ctx.fillRect(z.x + 8, z.y + 8, z.w - 16, 26);
       ctx.fillStyle = '#f8fafc';
       ctx.font = 'bold 11px system-ui';
       ctx.textAlign = 'left';
       ctx.fillText(`${z.icon}  ${z.name.toUpperCase()}`, z.x + 14, z.y + 25);
 
+      // Dynamic Capacity Badge on Zone Header
+      if (cap >= 95) {
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = 'bold 9px system-ui';
+        ctx.textAlign = 'right';
+        ctx.fillText(`🚨 CRITICAL ${cap}%`, z.x + z.w - 14, z.y + 25);
+      } else if (cap >= 85) {
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 9px system-ui';
+        ctx.textAlign = 'right';
+        ctx.fillText(`⚠️ SURGE ${cap}%`, z.x + z.w - 14, z.y + 25);
+      } else {
+        ctx.fillStyle = '#4ade80';
+        ctx.font = 'bold 9px system-ui';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${cap}% CAP`, z.x + z.w - 14, z.y + 25);
+      }
+
       // Subtext
       if (z.subtext && this.scale >= 0.85) {
+        ctx.textAlign = 'left';
         ctx.fillStyle = '#94a3b8';
         ctx.font = '9px system-ui';
         ctx.fillText(z.subtext, z.x + 14, z.y + 44);
@@ -315,7 +389,8 @@ class VenueMapRenderer {
 
         ctx.fillStyle = '#f43f5e';
         ctx.beginPath();
-        ctx.roundRect(midX - 35, midY - 10, 70, 20, 4);
+        const badgeWidth = this.isOrganizerMode ? 90 : 72;
+        ctx.roundRect(midX - badgeWidth / 2, midY - 10, badgeWidth, 20, 5);
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1.5;
@@ -325,7 +400,7 @@ class VenueMapRenderer {
         ctx.font = 'bold 9px system-ui';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('⛔ BLOCKED', midX, midY);
+        ctx.fillText(this.isOrganizerMode ? '🚧 ROADBLOCK ✕' : '⛔ BLOCKED', midX, midY);
       } else if (edge.hasStairs) {
         // Physical stair treads across corridor
         ctx.strokeStyle = '#f59e0b';
@@ -339,18 +414,18 @@ class VenueMapRenderer {
         const midY = (n1.y + n2.y) / 2;
         if (this.isWheelchairMode) {
           ctx.fillStyle = '#7f1d1d';
-          ctx.fillRect(midX - 38, midY - 9, 76, 18);
+          ctx.fillRect(midX - 44, midY - 10, 88, 20);
           ctx.strokeStyle = '#f87171';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(midX - 38, midY - 9, 76, 18);
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(midX - 44, midY - 10, 88, 20);
           ctx.fillStyle = '#fecaca';
-          ctx.font = 'bold 8px system-ui';
+          ctx.font = 'bold 9px system-ui';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText('🚫 STAIRS AVOIDED', midX, midY);
         } else {
           ctx.fillStyle = '#78350f';
-          ctx.fillRect(midX - 22, midY - 8, 44, 16);
+          ctx.fillRect(midX - 24, midY - 8, 48, 16);
           ctx.fillStyle = '#fde68a';
           ctx.font = 'bold 8px system-ui';
           ctx.textAlign = 'center';
@@ -358,12 +433,20 @@ class VenueMapRenderer {
           ctx.fillText('STAIRS ≡', midX, midY);
         }
       } else {
-        // Subtle walking centerline
-        ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([6, 6]);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        // Subtle walking centerline or organizer clickable highlight
+        if (this.isOrganizerMode) {
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else {
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([6, 6]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
       }
 
       ctx.restore();

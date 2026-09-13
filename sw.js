@@ -1,5 +1,5 @@
 // EventPulse Service Worker - Network First with Offline Fallback
-const CACHE_NAME = 'eventpulse-v3';
+const CACHE_NAME = 'eventpulse-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

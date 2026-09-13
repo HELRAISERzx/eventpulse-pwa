@@ -69,6 +69,112 @@ class OrganizerController {
     });
   }
 
+  // Render interactive zone capacity simulation sliders
+  renderZoneCapacities() {
+    const listEl = document.getElementById('zoneCapacityList');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+    this.zoneCapacities.forEach((zone) => {
+      const stateClass = zone.pct >= 95 ? 'critical-state' : zone.pct >= 85 ? 'warning-state' : '';
+      const badgeClass = zone.pct >= 95 ? 'critical' : zone.pct >= 85 ? 'warning' : 'nominal';
+      const badgeText = zone.pct >= 95 ? '🚨 CRITICAL' : zone.pct >= 85 ? '⚠️ WARNING' : 'NORMAL';
+
+      const div = document.createElement('div');
+      div.className = `capacity-slider-item ${stateClass}`;
+      div.innerHTML = `
+        <div class="capacity-slider-header">
+          <span class="capacity-zone-title">${zone.name}</span>
+          <span class="capacity-badge ${badgeClass}" id="badge-${zone.id}">${badgeText} (${zone.pct}%)</span>
+        </div>
+        <input type="range" min="10" max="100" value="${zone.pct}" class="interactive-range-slider" data-zone="${zone.id}" id="slider-${zone.id}">
+        <div class="flex justify-between text-2xs text-slate-400 mt-1">
+          <span>Est. ${Math.round(zone.maxCap * (zone.pct / 100))} / ${zone.maxCap} attendees</span>
+          <span class="text-sky-400 font-bold" id="val-${zone.id}">${zone.pct}%</span>
+        </div>
+      `;
+
+      const slider = div.querySelector('input');
+      slider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        this.updateSingleZoneCapacity(zone.id, val);
+      });
+
+      listEl.appendChild(div);
+
+      // Sync initial state to renderer
+      if (this.renderer) {
+        this.renderer.zoneCapacities[zone.id] = zone.pct;
+      }
+    });
+
+    if (this.renderer) this.renderer.render();
+
+    // Wire simulation buttons
+    const btnSurge = document.getElementById('btnSimulateKeynoteSurge');
+    if (btnSurge && !btnSurge.dataset.bound) {
+      btnSurge.dataset.bound = 'true';
+      btnSurge.addEventListener('click', () => {
+        this.updateSingleZoneCapacity('zone_keynote', 98);
+        this.updateSingleZoneCapacity('zone_food', 89);
+        if (this.alerts) {
+          this.alerts.triggerScreenStrobe('amber');
+          this.alerts.playChirp(440, 0.4);
+        }
+      });
+    }
+
+    const btnReset = document.getElementById('btnResetZoneCapacities');
+    if (btnReset && !btnReset.dataset.bound) {
+      btnReset.dataset.bound = 'true';
+      btnReset.addEventListener('click', () => {
+        const defaults = { zone_keynote: 45, zone_food: 35, zone_expo: 30, zone_workshops: 25, zone_lounge: 20, zone_services: 15 };
+        this.zoneCapacities.forEach((z) => {
+          this.updateSingleZoneCapacity(z.id, defaults[z.id] || 30);
+        });
+      });
+    }
+  }
+
+  updateSingleZoneCapacity(zoneId, pct) {
+    const zone = this.zoneCapacities.find((z) => z.id === zoneId);
+    if (!zone) return;
+    zone.pct = pct;
+
+    // Sync to renderer
+    if (this.renderer) {
+      this.renderer.zoneCapacities[zoneId] = pct;
+      this.renderer.render();
+    }
+
+    // Update UI badge & slider
+    const badge = document.getElementById(`badge-${zoneId}`);
+    const slider = document.getElementById(`slider-${zoneId}`);
+    const valText = document.getElementById(`val-${zoneId}`);
+
+    if (slider && parseInt(slider.value, 10) !== pct) slider.value = pct;
+    if (valText) valText.textContent = `${pct}%`;
+
+    if (badge) {
+      const badgeClass = pct >= 95 ? 'critical' : pct >= 85 ? 'warning' : 'nominal';
+      const badgeText = pct >= 95 ? '🚨 CRITICAL' : pct >= 85 ? '⚠️ WARNING' : 'NORMAL';
+      badge.className = `capacity-badge ${badgeClass}`;
+      badge.textContent = `${badgeText} (${pct}%)`;
+
+      const card = badge.closest('.capacity-slider-item');
+      if (card) {
+        card.className = `capacity-slider-item ${pct >= 95 ? 'critical-state' : pct >= 85 ? 'warning-state' : ''}`;
+      }
+    }
+
+    // Dynamic strobe triggers if crossing alert thresholds
+    if (pct >= 95 && this.alerts) {
+      this.alerts.triggerScreenStrobe('red');
+    } else if (pct >= 85 && this.alerts) {
+      this.alerts.triggerScreenStrobe('amber');
+    }
+  }
+
   // Populate list of major corridors to place barriers
   renderCorridorList() {
     const listEl = document.getElementById('corridorList');
