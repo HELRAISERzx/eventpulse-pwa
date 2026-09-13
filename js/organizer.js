@@ -112,8 +112,8 @@ class OrganizerController {
 
     // Wire simulation buttons
     const btnSurge = document.getElementById('btnSimulateKeynoteSurge');
-    if (btnSurge && !btnSurge.dataset.bound) {
-      btnSurge.dataset.bound = 'true';
+    if (btnSurge && !btnSurge.getAttribute('data-bound')) {
+      btnSurge.setAttribute('data-bound', 'true');
       btnSurge.addEventListener('click', () => {
         this.updateSingleZoneCapacity('zone_keynote', 98);
         this.updateSingleZoneCapacity('zone_food', 89);
@@ -125,8 +125,8 @@ class OrganizerController {
     }
 
     const btnReset = document.getElementById('btnResetZoneCapacities');
-    if (btnReset && !btnReset.dataset.bound) {
-      btnReset.dataset.bound = 'true';
+    if (btnReset && !btnReset.getAttribute('data-bound')) {
+      btnReset.setAttribute('data-bound', 'true');
       btnReset.addEventListener('click', () => {
         const defaults = { zone_keynote: 45, zone_food: 35, zone_expo: 30, zone_workshops: 25, zone_lounge: 20, zone_services: 15 };
         this.zoneCapacities.forEach((z) => {
@@ -287,58 +287,6 @@ class OrganizerController {
       }
 
       queueEl.appendChild(item);
-    });
-  }
-
-  // Render real-time zone capacities and crowd meters
-  renderZoneCapacities() {
-    const listEl = document.getElementById('zoneCapacityList');
-    if (!listEl) return;
-
-    listEl.innerHTML = '';
-    this.zoneCapacities.forEach((zone) => {
-      const isCritical = zone.pct >= 85;
-      const isWarning = zone.pct >= 65 && zone.pct < 85;
-      const statusClass = isCritical ? 'critical' : isWarning ? 'warning' : 'normal';
-      const badgeText = isCritical ? '🚨 CRITICAL (OVERFLOW)' : isWarning ? '⚠️ HIGH' : 'NORMAL';
-
-      const div = document.createElement('div');
-      div.className = 'capacity-item';
-      div.innerHTML = `
-        <div class="capacity-header">
-          <strong class="text-xs text-slate-200">${zone.name}</strong>
-          <span class="text-2xs font-bold ${isCritical ? 'text-rose-400' : isWarning ? 'text-amber-400' : 'text-emerald-400'}">${zone.pct}% • ${badgeText}</span>
-        </div>
-        <div class="capacity-bar-bg">
-          <div class="capacity-bar-fill ${statusClass}" style="width: ${zone.pct}%;"></div>
-        </div>
-        <div class="capacity-footer">
-          <span class="text-2xs text-slate-400">${zone.current} / ${zone.maxCap} heads</span>
-          ${isCritical || isWarning ? `
-            <button class="btn-divert" data-zone="${zone.id}">Divert Crowd</button>
-          ` : ''}
-        </div>
-      `;
-
-      const divertBtn = div.querySelector('.btn-divert');
-      if (divertBtn) {
-        divertBtn.addEventListener('click', () => {
-          // Block entry corridor to protect zone
-          if (zone.corridorToBlock) {
-            this.renderer.blockedEdgeIds.add(zone.corridorToBlock);
-            this.renderCorridorList();
-            this.renderer.render();
-          }
-          if (this.onBroadcast) {
-            this.onBroadcast({
-              type: 'CROWD_DIVERSION',
-              message: `⚠️ CROWD DIVERSION: ${zone.name} at ${zone.pct}% capacity! Rerouting incoming foot traffic to alternate wings.`
-            });
-          }
-        });
-      }
-
-      listEl.appendChild(div);
     });
   }
 

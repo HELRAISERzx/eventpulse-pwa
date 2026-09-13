@@ -881,6 +881,35 @@ document.addEventListener('DOMContentLoaded', () => {
     let miniDashOffset = 0;
     let currentMiniRoute = null;
 
+    const btnMiniStepFree = document.getElementById('btnMiniToggleStepFree');
+    const btnMiniBlock = document.getElementById('btnMiniToggleBlock');
+    const btnMiniFull = document.getElementById('btnMiniLaunchFull');
+    const statusText = document.getElementById('miniDemoStatusText');
+    const metricDist = document.getElementById('miniMetricDist');
+    const metricStairs = document.getElementById('miniMetricStairs');
+    const metricTime = document.getElementById('miniMetricTime');
+    const metricStatus = document.getElementById('miniMetricStatus');
+
+    function updateMiniMetrics(path) {
+      if (!path) {
+        if (metricDist) metricDist.textContent = 'No Path';
+        if (metricStatus) metricStatus.textContent = 'Blocked';
+        return;
+      }
+      if (metricDist) metricDist.textContent = `${path.distance || 0}m`;
+      if (metricTime) metricTime.textContent = `~${Math.ceil((path.estimatedSeconds || 60) / 60)} min`;
+      if (metricStairs) metricStairs.textContent = miniStepFree ? '♿ Step-Free Safe' : '⚠️ Stairs Included';
+      if (metricStatus) {
+        metricStatus.textContent = miniBlocked ? '🔄 Detour Active' : 'Nominal Flow';
+        metricStatus.className = `metric-val ${miniBlocked ? 'text-amber-400' : 'text-emerald-400'}`;
+      }
+      if (statusText) {
+        statusText.textContent = miniBlocked
+          ? 'Detour Active: B4 ➔ B3 ➔ C3 ➔ C2 ➔ Keynote Hall (Stairs & Bottleneck Avoided)'
+          : 'Active Path: Food Plaza (B4) ➔ Keynote Hall (A2)';
+      }
+    }
+
     function recalculateMiniRoute() {
       const blockedEdges = miniBlocked ? new Set(['edge_b1_b3', 'edge_a1_b1']) : new Set();
       currentMiniRoute = pathfinder.findPath('n_b4', 'main_keynote', {
@@ -1144,7 +1173,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       organizerPasscodeInput.style.borderColor = '#f59e0b';
       setTimeout(() => { organizerPasscodeInput.style.borderColor = ''; }, 1500);
-      organizerPasscodeInput.focus();
+      try { organizerPasscodeInput.focus(); } catch (_) {}
       return;
     }
 
