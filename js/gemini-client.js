@@ -1,11 +1,11 @@
-﻿// EventPulse — Gemini AI Client (Browser-Direct)
+// EventPulse — Gemini AI Client (Browser-Direct)
 // Calls the Gemini REST API directly from the browser when an API key is provided.
 // Falls back to the local proxy (/api/assistant) or curated local responses if unavailable.
 
 class GeminiClient {
   constructor() {
     this.STORAGE_KEY = 'eventpulse-gemini-key';
-    this.MODEL = 'gemini-2.0-flash';
+    this.MODEL = 'gemini-3.6-flash';
     this.BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
     this.apiKey = this._loadKey();
   }

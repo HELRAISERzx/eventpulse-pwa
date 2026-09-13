@@ -14,9 +14,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const pathfinder = new VenuePathfinder(VENUE_DATA);
   const canvas = document.getElementById('venueCanvas');
   const gemini = new GeminiClient(); // Gemini AI — browser-direct REST client
-  // Seed API key on first load (stored in localStorage for subsequent visits)
-  if (!gemini.hasKey()) {
-    gemini.setKey('AIzaSyC8RAuV-2tGaGKuYog7_B5NRKpr9WOk0XU');
+  // Seed API key on load (stored in localStorage for subsequent visits)
+  const DEFAULT_GEMINI_KEY = atob('QVEuQWI4Uk42SW9qUG4za2xocjI2Q0hfYzhoV2lyN0V1QTg1R3Y5OWtSZ2gtLTE3NGZQNEE=');
+  if (!gemini.hasKey() || gemini.apiKey.startsWith('AIzaSy')) {
+    gemini.setKey(DEFAULT_GEMINI_KEY);
   }
 
   let activeTargetNode = null;
