@@ -39,18 +39,17 @@
       </div>
     </div>
 
-    <!-- Multi-Page Top Navigation Bar -->
-    <nav class="app-nav-links" id="mainNav" aria-label="Main Navigation">
+    <!-- Mode Switcher -->
+    <nav class="app-nav-links" id="mainNav" aria-label="App Navigation">
       <button id="navBtnHome" class="nav-link-btn active" data-view="viewHome">🏠 Home</button>
-      <button id="tabAttendee" class="nav-link-btn" data-view="attendeeView">🗺️ Live Map</button>
-      <button id="navBtnFeatures" class="nav-link-btn" data-view="viewFeatures">✨ Features</button>
-      <button id="tabOrganizer" class="nav-link-btn" data-view="organizerView">🖥️ Ops Console</button>
+      <button id="tabAttendee" class="nav-link-btn" data-view="attendeeView">🗺️ Attendee Map</button>
+      <button id="tabOrganizer" class="nav-link-btn" data-view="organizerView">🛡️ Organizer</button>
     </nav>
 
     <!-- Right Header Action -->
     <div class="header-actions">
-      <button id="btnHeaderLaunchMap" class="header-cta-btn" title="Launch Interactive Map">
-        🚀 Enter Map
+      <button id="btnHeaderLaunchMap" class="header-cta-btn" title="Open Venue Map">
+        🚀 Open Map
       </button>
     </div>
   </header>
@@ -58,27 +57,29 @@
   <!-- Main Container -->
   <div class="app-container">
 
-    <!-- ==================== 0. LANDING HOME VIEW ==================== -->
+    <!-- ==================== 0. INTRODUCTORY LANDING HOME ==================== -->
     <section id="viewHome" class="view-panel landing-view-panel active">
-      <div class="landing-container">
-        
-        <!-- Hero Section -->
-        <div class="landing-hero">
-          <div class="hero-badge">
-            <span class="hero-badge-dot">●</span>
-            <span>SMART INDOOR VENUE NAVIGATION & SAFETY PWA</span>
+      <div class="intro-hero-wrapper">
+        <div class="intro-card">
+          
+          <div class="intro-event-pill">
+            <span class="intro-live-dot">●</span>
+            <span>GLOBAL TECH SUMMIT 2026</span>
           </div>
-          <h2 class="hero-title">
-            Navigate Massive Venues with <span class="gradient-text">Zero GPS</span> & <span class="gradient-text-ai">AI Precision</span>
-          </h2>
-          <p class="hero-subtitle">
-            Engineered for high-density convention centers, expos, and festivals. Real-time indoor pathfinding, stochastic crowd surge dispersion, accessibility-first routing, and an intelligent copilot powered by Google Gemini 2.0 Flash.
+
+          <div class="intro-brand-icon">
+            <span class="intro-lightning">⚡</span>
+          </div>
+
+          <h1 class="intro-title">EventPulse</h1>
+
+          <p class="intro-lead">
+            Official indoor venue guidance, step-free accessibility navigation, and real-time crowd safety hub for Global Tech Summit 2026.
           </p>
 
-          <!-- Primary Action CTAs -->
-          <div class="hero-cta-group">
+          <div class="intro-btn-group">
             <button id="btnLandingLaunchMap" class="btn btn-hero-primary">
-              🚀 Enter Live Map
+              🚀 Enter Interactive Venue Map
             </button>
             <button id="btnLandingStepFree" class="btn btn-hero-emerald">
               ♿ Step-Free Mode
@@ -87,99 +88,18 @@
               ✨ Ask Gemini AI
             </button>
             <button id="btnLandingOrganizer" class="btn btn-hero-subtle">
-              🖥️ Organizer Console
+              🛡️ Organizer Console
             </button>
           </div>
+
+          <div class="intro-meta-tags">
+            <span class="intro-tag">📍 Halls 1–4</span>
+            <span class="intro-tag">📶 100% Offline Ready</span>
+            <span class="intro-tag">🧭 Zero-GPS Anchors</span>
+            <span class="intro-tag">🤖 Gemini 2.0 Flash</span>
+          </div>
+
         </div>
-
-        <!-- Live Venue Pulse Status Bar -->
-        <div class="landing-pulse-strip">
-          <div class="pulse-stat-card">
-            <span class="pulse-stat-icon">🏛️</span>
-            <div>
-              <div class="pulse-stat-label">CURRENT KEYNOTE</div>
-              <div class="pulse-stat-value">Opening Keynote (11:30 AM)</div>
-            </div>
-          </div>
-          <div class="pulse-stat-card">
-            <span class="pulse-stat-icon">👥</span>
-            <div>
-              <div class="pulse-stat-label">VENUE CROWD DENSITY</div>
-              <div class="pulse-stat-value text-emerald-400">74% • Balanced Flows</div>
-            </div>
-          </div>
-          <div class="pulse-stat-card">
-            <span class="pulse-stat-icon">♿</span>
-            <div>
-              <div class="pulse-stat-label">ACCESSIBILITY STATUS</div>
-              <div class="pulse-stat-value text-sky-400">Step-Free Routes Active</div>
-            </div>
-          </div>
-          <div class="pulse-stat-card">
-            <span class="pulse-stat-icon">📶</span>
-            <div>
-              <div class="pulse-stat-label">OFFLINE PWA ENGINE</div>
-              <div class="pulse-stat-value text-emerald-400">100% Cache-Ready</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Section Header -->
-        <div class="landing-section-header">
-          <h3 class="section-title">Core Safety & Navigation Innovations</h3>
-          <p class="section-sub">Four integrated pillars designed specifically for large-scale indoor venues.</p>
-        </div>
-
-        <!-- 4 Focused Feature Cards Grid -->
-        <div class="landing-features-grid">
-          <div class="landing-feature-card">
-            <div class="feature-card-icon" style="background:rgba(14, 165, 233, 0.2); border-color:#38bdf8;">🗺️</div>
-            <h4 class="feature-card-title">Anchor-Based Indoor Positioning</h4>
-            <p class="feature-card-desc">
-              Satellite GPS fails inside concrete halls. EventPulse uses 2-character pillar anchors (A1–D2) and high-visibility QR scans for instant zero-lag orientation without beacons.
-            </p>
-            <button class="feature-card-action" data-jump="map-anchors">Try Pillar Calibration →</button>
-          </div>
-
-          <div class="landing-feature-card">
-            <div class="feature-card-icon" style="background:rgba(34, 197, 94, 0.2); border-color:#22c55e;">♿</div>
-            <h4 class="feature-card-title">Step-Free Wheelchair Routing</h4>
-            <p class="feature-card-desc">
-              Dynamically excludes physical stairways, guiding mobility-impaired attendees along wide elevator routes highlighted with an animated emerald ribbon and stair warnings.
-            </p>
-            <button class="feature-card-action text-emerald-400" data-jump="map-stepfree">Preview Step-Free Route →</button>
-          </div>
-
-          <div class="landing-feature-card">
-            <div class="feature-card-icon" style="background:rgba(244, 63, 94, 0.2); border-color:#f43f5e;">🚨</div>
-            <h4 class="feature-card-title">Stochastic Crowd Surge Rerouting</h4>
-            <p class="feature-card-desc">
-              Prevents secondary stampedes by probabilistically diverting an adjustable percentage (10%–100%) of attendees around congested choke points in real time.
-            </p>
-            <button class="feature-card-action text-rose-400" data-jump="ops-reroute">Test Anti-Stampede Engine →</button>
-          </div>
-
-          <div class="landing-feature-card">
-            <div class="feature-card-icon" style="background:rgba(168, 85, 247, 0.2); border-color:#c084fc;">✨</div>
-            <h4 class="feature-card-title">Gemini 2.0 Flash Event Copilot</h4>
-            <p class="feature-card-desc">
-              Browser-direct Google Gemini integration grounded with full venue spatial graph context. Instant streaming answers for quiet zones, restrooms, and schedule shifts.
-            </p>
-            <button class="feature-card-action text-purple-400" data-jump="open-gemini">Chat with Copilot →</button>
-          </div>
-        </div>
-
-        <!-- Quick Launch Footer Banner -->
-        <div class="landing-quick-footer">
-          <div>
-            <strong class="text-sm text-slate-100 block">Ready to explore the venue floor plan?</strong>
-            <span class="text-2xs text-slate-400">Works 100% offline with interactive 60fps canvas rendering.</span>
-          </div>
-          <button id="btnLandingBottomLaunch" class="btn btn-primary btn-sm">
-            Launch Interactive Map ➔
-          </button>
-        </div>
-
       </div>
     </section>
 
@@ -320,65 +240,7 @@
 
     </main>
 
-    <!-- ==================== 2. FEATURES & ARCHITECTURE VIEW ==================== -->
-    <section id="viewFeatures" class="view-panel features-view-panel hidden">
-      <div class="landing-container">
-        <div class="landing-section-header" style="text-align:left;">
-          <h2 class="section-title text-xl">⚡ Architecture & Innovation Matrix</h2>
-          <p class="section-sub">Engineered specifically to solve critical indoor positioning, crowd safety, and accessibility challenges.</p>
-        </div>
 
-        <div class="tech-matrix-grid">
-          <div class="tech-card">
-            <span class="tech-tag bg-sky-950 text-sky-400 border border-sky-500/50">LOCALIZATION</span>
-            <h4 class="text-sm font-bold text-slate-100">Zero-GPS Pillar Anchors</h4>
-            <p class="text-xs text-slate-400">Lightweight 2-character pillar anchors (A1–D2) and instant QR scans calibrate attendee coordinates without expensive BLE beacons or unreliable indoor Wi-Fi triangulation.</p>
-            <button class="feature-card-action" data-jump="map-anchors">Try on Map →</button>
-          </div>
-
-          <div class="tech-card">
-            <span class="tech-tag bg-emerald-950 text-emerald-400 border border-emerald-500/50">ACCESSIBILITY</span>
-            <h4 class="text-sm font-bold text-slate-100">A* Step-Free Route Engine</h4>
-            <p class="text-xs text-slate-400">Mathematical A* graph solver that dynamically excludes stairways and steep corridors, rendering certified elevator-safe paths highlighted with an emerald ribbon and stair warnings.</p>
-            <button class="feature-card-action text-emerald-400" data-jump="map-stepfree">Try Step-Free →</button>
-          </div>
-
-          <div class="tech-card">
-            <span class="tech-tag bg-rose-950 text-rose-400 border border-rose-500/50">SAFETY</span>
-            <h4 class="text-sm font-bold text-slate-100">Stochastic Anti-Stampede Dispersion</h4>
-            <p class="text-xs text-slate-400">Prevents dangerous secondary bottlenecks by probabilistically splitting attendee traffic across multiple parallel walkways when an emergency or room relocation occurs.</p>
-            <button class="feature-card-action text-rose-400" data-jump="ops-reroute">View Rerouting →</button>
-          </div>
-
-          <div class="tech-card">
-            <span class="tech-tag bg-purple-950 text-purple-400 border border-purple-500/50">INTELLIGENCE</span>
-            <h4 class="text-sm font-bold text-slate-100">Gemini 2.0 Flash AI Copilot</h4>
-            <p class="text-xs text-slate-400">Client-direct Google Gemini REST client grounded with real-time architectural graph nodes, session schedules, and live crowd hazard states for instant streaming advice.</p>
-            <button class="feature-card-action text-purple-400" data-jump="open-gemini">Open Copilot →</button>
-          </div>
-
-          <div class="tech-card">
-            <span class="tech-tag bg-amber-950 text-amber-400 border border-amber-500/50">COLLABORATION</span>
-            <h4 class="text-sm font-bold text-slate-100">Flock Mode Group Tethering</h4>
-            <p class="text-xs text-slate-400">Real-time inter-member proximity tracking with automatic leadership failover if a team leader strays &gt;35m or battery falls under 10%.</p>
-            <button class="feature-card-action text-amber-400" data-jump="open-flock">Launch Flock →</button>
-          </div>
-
-          <div class="tech-card">
-            <span class="tech-tag bg-slate-900 text-slate-300 border border-slate-700">OFFLINE PWA</span>
-            <h4 class="text-sm font-bold text-slate-100">Zero-Build & Offline First</h4>
-            <p class="text-xs text-slate-400">Pure vanilla HTML5/Canvas2D with Network-First Service Worker caching. Under 130KB total footprint with instant 60fps rendering even without internet.</p>
-            <button class="feature-card-action text-slate-300" data-jump="launch-map">Launch PWA →</button>
-          </div>
-        </div>
-
-        <div class="flex justify-center mt-6">
-          <button id="btnFeaturesToMap" class="btn btn-primary">
-            🚀 Launch Live Venue Map
-          </button>
-        </div>
-      </div>
-    </section>
 
     <!-- ==================== 3. ORGANIZER COMMAND CENTER ==================== -->
     <aside id="organizerView" class="view-panel hidden">

@@ -713,14 +713,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewPanels = {
     home: document.getElementById('viewHome'),
     map: document.getElementById('attendeeView'),
-    features: document.getElementById('viewFeatures'),
     organizer: document.getElementById('organizerView')
   };
 
   const navBtns = {
     home: document.getElementById('navBtnHome'),
     map: document.getElementById('tabAttendee'),
-    features: document.getElementById('navBtnFeatures'),
     organizer: document.getElementById('tabOrganizer')
   };
 
@@ -801,7 +799,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Top Nav Click Listeners
   if (navBtns.home) navBtns.home.addEventListener('click', () => switchView('home'));
   if (navBtns.map) navBtns.map.addEventListener('click', () => switchView('map'));
-  if (navBtns.features) navBtns.features.addEventListener('click', () => switchView('features'));
   if (navBtns.organizer) navBtns.organizer.addEventListener('click', () => switchView('organizer'));
 
   // Header Brand & Launch Buttons
@@ -811,15 +808,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnHeaderLaunchMap = document.getElementById('btnHeaderLaunchMap');
   if (btnHeaderLaunchMap) btnHeaderLaunchMap.addEventListener('click', () => switchView('map'));
 
-  // Landing Home Page CTA Buttons
+  // Introductory Landing Page CTA Buttons
   const btnLandingLaunchMap = document.getElementById('btnLandingLaunchMap');
   if (btnLandingLaunchMap) btnLandingLaunchMap.addEventListener('click', () => switchView('map'));
-
-  const btnLandingBottomLaunch = document.getElementById('btnLandingBottomLaunch');
-  if (btnLandingBottomLaunch) btnLandingBottomLaunch.addEventListener('click', () => switchView('map'));
-
-  const btnFeaturesToMap = document.getElementById('btnFeaturesToMap');
-  if (btnFeaturesToMap) btnFeaturesToMap.addEventListener('click', () => switchView('map'));
 
   const btnLandingStepFree = document.getElementById('btnLandingStepFree');
   if (btnLandingStepFree) {
@@ -847,7 +838,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLandingOrganizer.addEventListener('click', () => switchView('organizer'));
   }
 
-  // Feature Card & Deep-link Action Triggers ([data-jump])
+  // Deep-link Action Triggers ([data-jump])
   document.querySelectorAll('[data-jump]').forEach((el) => {
     el.addEventListener('click', () => {
       const action = el.getAttribute('data-jump');
@@ -883,8 +874,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const hash = window.location.hash.replace('#', '').toLowerCase();
     if (hash === 'map' || hash === 'attendee') {
       switchView('map', true);
-    } else if (hash === 'features' || hash === 'innovations') {
-      switchView('features', true);
     } else if (hash === 'organizer' || hash === 'ops') {
       if (isOrganizerAuthorized) {
         switchView('organizer', true);
