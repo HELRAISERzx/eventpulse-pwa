@@ -464,19 +464,23 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // 2. Try local Express proxy (when Node server is running)
-    try {
-      const response = await fetch('http://localhost:3000/api/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: userText || aiResponses[topic].default, topic })
-      });
+    // 2. Try local proxy only when running in a local environment (avoids Mixed Content / CORS errors on live HTTPS GitHub Pages)
+    const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    if (isLocalhost) {
+      try {
+        const response = await fetch('/api/assistant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: userText || aiResponses[topic].default, topic })
+        });
 
-      if (!response.ok) throw new Error('Proxy unavailable');
-      const data = await response.json();
-      if (data && data.answer) return data.answer;
-    } catch (error) {
-      console.warn('Gemini proxy unavailable, using local fallback:', error.message);
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.answer) return data.answer;
+        }
+      } catch (error) {
+        console.warn('Local Gemini proxy unavailable:', error.message);
+      }
     }
 
     // 3. Local curated fallback

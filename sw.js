@@ -1,5 +1,5 @@
 // EventPulse Service Worker - Network First with Offline Fallback
-const CACHE_NAME = 'eventpulse-v4';
+const CACHE_NAME = 'eventpulse-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -36,6 +36,11 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only handle GET requests and same-origin requests to prevent intercepting external Gemini API calls
+  if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
   // Network first, cache fallback
   event.respondWith(
     fetch(event.request)
