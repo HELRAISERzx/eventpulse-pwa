@@ -706,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
     organizer: document.getElementById('tabOrganizer')
   };
 
-  let isOrganizerAuthorized = false;
+  let isOrganizerAuthorized = true; // Unlocked by default so Organizer Mode opens directly without obstacles
   const VALID_ORGANIZER_CODES = ['EVENT2026', '7700', 'ADMIN', 'OP2026', '1234', 'ORGANIZER', 'OPS', 'DEMO', 'PASSWORD', 'PASSCODE'];
 
   const modalOrganizerAuth = document.getElementById('modalOrganizerAuth');
@@ -774,7 +774,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (targetKey === 'organizer') {
       renderer.isOrganizerMode = true;
       renderer.render();
-      if (organizer) organizer.renderZoneCapacities();
+      if (organizer) {
+        organizer.renderZoneCapacities();
+        organizer.renderCorridorList();
+        organizer.renderTicketsQueue();
+        organizer.renderSupportWatchList();
+      }
       alerts.playChirp(880, 0.15);
     }
 
@@ -1128,38 +1133,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   function validateAndUnlockOrganizer() {
-    if (!organizerPasscodeInput) return;
-    const entered = organizerPasscodeInput.value.trim().toUpperCase();
-
-    // Guard: Prevent "Invalid code / Access denied" error when user has not entered anything
-    if (!entered) {
-      if (authErrorMsg) {
-        authErrorMsg.textContent = '⚠️ Please enter an authorization passcode or click a demo code below.';
-        authErrorMsg.classList.remove('hidden');
-      }
-      organizerPasscodeInput.style.borderColor = '#f59e0b';
-      setTimeout(() => { organizerPasscodeInput.style.borderColor = ''; }, 1500);
-      organizerPasscodeInput.focus();
-      return;
-    }
-
-    if (VALID_ORGANIZER_CODES.includes(entered)) {
-      isOrganizerAuthorized = true;
-      if (authErrorMsg) authErrorMsg.classList.add('hidden');
-      if (modalOrganizerAuth) modalOrganizerAuth.classList.add('hidden');
+    isOrganizerAuthorized = true;
+    if (authErrorMsg) authErrorMsg.classList.add('hidden');
+    if (modalOrganizerAuth) modalOrganizerAuth.classList.add('hidden');
+    if (organizerPasscodeInput) {
       organizerPasscodeInput.value = '';
       organizerPasscodeInput.style.borderColor = '';
-      switchToOrganizerView();
-      showTicker('🔓 Organizer Command Center Unlocked. Welcome, Coordinator.');
-    } else {
-      if (authErrorMsg) {
-        authErrorMsg.textContent = '❌ Invalid authorization code. Access denied.';
-        authErrorMsg.classList.remove('hidden');
-      }
-      alerts.triggerEmergencyAlert('Access Denied');
-      organizerPasscodeInput.style.borderColor = '#f43f5e';
-      setTimeout(() => { organizerPasscodeInput.style.borderColor = ''; }, 1500);
     }
+    switchToOrganizerView();
+    showTicker('🔓 Organizer Command Center Unlocked. Welcome, Coordinator.');
   }
 
   if (btnSubmitOrganizerAuth) {
