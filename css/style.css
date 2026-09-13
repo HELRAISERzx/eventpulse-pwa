@@ -1940,3 +1940,84 @@ body {
   transform: translateY(-1px);
 }
 
+/* ================= RESPONSIVE DESIGN & PERFORMANCE BOOST ================= */
+.map-viewport-wrapper {
+  contain: content;
+  transform: translateZ(0);
+}
+
+.view-panel {
+  contain: layout style;
+}
+
+@media (max-width: 680px) {
+  .app-header {
+    padding: 0 8px;
+    height: 50px;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .nav-link-btn {
+    padding: 5px 9px;
+    font-size: 10px;
+    gap: 3px;
+  }
+
+  .header-cta-btn {
+    padding: 5px 10px;
+    font-size: 10px;
+  }
+
+  .intro-card {
+    padding: 24px 16px;
+    border-radius: 16px;
+  }
+
+  .intro-title {
+    font-size: 28px;
+  }
+
+  .intro-lead {
+    font-size: 12px;
+  }
+
+  .btn-hero-primary {
+    padding: 11px 16px;
+    font-size: 13px;
+  }
+
+  .quick-nav-bar {
+    top: 8px;
+    gap: 4px;
+  }
+
+  .quick-nav-chip {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .header-brand .brand-title {
+    font-size: 13px;
+  }
+
+  .brand-logo {
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
+
+  .nav-link-btn {
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+
+  .header-cta-btn {
+    display: none;
+  }
+}
+

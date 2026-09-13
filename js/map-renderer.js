@@ -44,19 +44,27 @@ class VenueMapRenderer {
       }, { passive: true });
     }
 
+    this.needsRedraw = true;
     this.initCanvasSize();
     this.bindEvents();
     this.startRenderLoop();
   }
 
+  requestRender() {
+    this.needsRedraw = true;
+  }
+
   initCanvasSize() {
+    if (!this.canvas.parentElement) return;
     const rect = this.canvas.parentElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.canvas.width = rect.width * dpr;
-    this.canvas.height = rect.height * dpr;
-    this.ctx.scale(dpr, dpr);
+    this.canvas.width = Math.floor(rect.width * dpr);
+    this.canvas.height = Math.floor(rect.height * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.cssWidth = rect.width;
     this.cssHeight = rect.height;
+    this.requestRender();
   }
 
   bindEvents() {
@@ -65,12 +73,13 @@ class VenueMapRenderer {
     let startY = 0;
     let touchStartDist = 0;
 
+    let resizeRaf = null;
     window.addEventListener('resize', () => {
-      this.initCanvasSize();
-      this.render();
-    });
-
-
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => {
+        this.initCanvasSize();
+      });
+    }, { passive: true });
 
     // Mouse drag
     this.canvas.addEventListener('mousedown', (e) => {
@@ -83,7 +92,8 @@ class VenueMapRenderer {
       if (!isDragging) return;
       this.panX = e.clientX - startX;
       this.panY = e.clientY - startY;
-    });
+      this.requestRender();
+    }, { passive: true });
 
     window.addEventListener('mouseup', (e) => {
       if (isDragging) {
@@ -121,6 +131,7 @@ class VenueMapRenderer {
       if (isDragging && e.touches.length === 1) {
         this.panX = e.touches[0].clientX - startX;
         this.panY = e.touches[0].clientY - startY;
+        this.requestRender();
       } else if (e.touches.length === 2) {
         const currentDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
@@ -160,6 +171,7 @@ class VenueMapRenderer {
     this.scale = newScale;
 
     this.updateZoomBadge();
+    this.requestRender();
   }
 
   zoomIn() {
@@ -175,6 +187,7 @@ class VenueMapRenderer {
     if (!node) return;
     this.panX = this.cssWidth / 2 - node.x * this.scale;
     this.panY = this.cssHeight / 2 - node.y * this.scale;
+    this.requestRender();
   }
 
   updateZoomBadge() {
@@ -230,14 +243,29 @@ class VenueMapRenderer {
 
   startRenderLoop() {
     const loop = () => {
-      this.routeDashOffset -= 1.2; // Smooth animation for path chevrons
-      this.render();
-      requestAnimationFrame(loop);
+      this.animationFrameId = requestAnimationFrame(loop);
+
+      // Skip render if page is backgrounded or canvas is hidden
+      if (document.hidden || !this.canvas.offsetParent || this.cssWidth <= 0) {
+        return;
+      }
+
+      const hasActiveRoute = !!(this.activeRoute && this.activeRoute.length >= 2);
+      const hasSurge = Object.values(this.zoneCapacities).some((c) => c >= 95);
+
+      if (hasActiveRoute || hasSurge || this.needsRedraw) {
+        if (hasActiveRoute) {
+          this.routeDashOffset -= 1.2;
+        }
+        this.needsRedraw = false;
+        this.render();
+      }
     };
-    requestAnimationFrame(loop);
+    this.animationFrameId = requestAnimationFrame(loop);
   }
 
   render() {
+    if (!this.canvas.offsetParent || this.cssWidth <= 0) return;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.cssWidth, this.cssHeight);
 
@@ -567,38 +595,35 @@ class VenueMapRenderer {
       ctx.stroke();
 
       // 3. Animated Forward-Pointing Directional Chevrons (▶ ▶ ▶)
+      ctx.beginPath();
+      const arrowSpacing = 32;
+      const offset = ((this.routeDashOffset % arrowSpacing) + arrowSpacing) % arrowSpacing;
+
       for (let i = 0; i < points.length - 1; i++) {
         const p1 = points[i];
         const p2 = points[i + 1];
         const segDx = p2.x - p1.x;
         const segDy = p2.y - p1.y;
         const segLen = Math.hypot(segDx, segDy);
-        const angle = Math.atan2(segDy, segDx);
+        if (segLen < 1) continue;
 
-        const arrowSpacing = 32;
-        const offset = (this.routeDashOffset % arrowSpacing + arrowSpacing) % arrowSpacing;
+        const cosA = segDx / segLen;
+        const sinA = segDy / segLen;
 
         for (let dist = offset; dist < segLen; dist += arrowSpacing) {
-          const ax = p1.x + (segDx / segLen) * dist;
-          const ay = p1.y + (segDy / segLen) * dist;
+          const ax = p1.x + cosA * dist;
+          const ay = p1.y + sinA * dist;
 
-          ctx.save();
-          ctx.translate(ax, ay);
-          ctx.rotate(angle);
-
-          ctx.beginPath();
-          ctx.moveTo(-6, -5);
-          ctx.lineTo(4, 0);
-          ctx.lineTo(-6, 5);
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2.5;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          ctx.stroke();
-
-          ctx.restore();
+          ctx.moveTo(ax - 6 * cosA + 5 * sinA, ay - 6 * sinA - 5 * cosA);
+          ctx.lineTo(ax + 4 * cosA, ay + 4 * sinA);
+          ctx.lineTo(ax - 6 * cosA - 5 * sinA, ay - 6 * sinA + 5 * cosA);
         }
       }
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
     }
 
     ctx.restore();
