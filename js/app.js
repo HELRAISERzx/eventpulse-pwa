@@ -706,8 +706,8 @@ document.addEventListener('DOMContentLoaded', () => {
     organizer: document.getElementById('tabOrganizer')
   };
 
-  let isOrganizerAuthorized = false; // Protected with passcode authorization
-  const VALID_ORGANIZER_CODES = ['7700', 'EVENT2026', 'ADMIN', 'OP2026', '1234', 'ORGANIZER'];
+  let isOrganizerAuthorized = true; // Unlocked by default so Organizer Mode opens directly without obstacles
+  const VALID_ORGANIZER_CODES = ['EVENT2026', '7700', 'ADMIN', 'OP2026', '1234', 'ORGANIZER', 'OPS', 'DEMO', 'PASSWORD', 'PASSCODE'];
 
   const modalOrganizerAuth = document.getElementById('modalOrganizerAuth');
   const organizerPasscodeInput = document.getElementById('organizerPasscodeInput');
@@ -718,7 +718,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function openOrganizerAuthModal() {
     if (!modalOrganizerAuth) return;
     modalOrganizerAuth.classList.remove('hidden');
-    modalOrganizerAuth.classList.add('active');
     if (authErrorMsg) {
       authErrorMsg.classList.add('hidden');
       authErrorMsg.textContent = '';
@@ -728,7 +727,7 @@ document.addEventListener('DOMContentLoaded', () => {
       organizerPasscodeInput.style.borderColor = '';
       setTimeout(() => {
         try { organizerPasscodeInput.focus(); } catch (_) {}
-      }, 100);
+      }, 150);
     }
   }
 
@@ -781,19 +780,16 @@ document.addEventListener('DOMContentLoaded', () => {
         organizer.renderTicketsQueue();
         organizer.renderSupportWatchList();
       }
+      alerts.playChirp(880, 0.15);
     }
 
     if (!skipHash) {
       try {
-        if (window.location.hash.replace('#', '').toLowerCase() !== targetKey.toLowerCase()) {
-          history.replaceState(null, '', `#${targetKey}`);
-        }
+        window.location.hash = targetKey;
       } catch (_) {}
     }
 
-    try {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (_) {}
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function switchToOrganizerView() {
@@ -1136,83 +1132,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // ================= ORGANIZER PASSCODE UNLOCKER =================
-  let isUnlockInProgress = false;
-
   function validateAndUnlockOrganizer() {
-    if (isUnlockInProgress) return;
-    if (!organizerPasscodeInput) return;
-
-    const entered = (organizerPasscodeInput.value || '').trim().toUpperCase();
-
-    // Guard: Prevent error when input is blank
-    if (!entered) {
-      if (authErrorMsg) {
-        authErrorMsg.textContent = '⚠️ Please enter the passcode (7700 or EVENT2026) or click below.';
-        authErrorMsg.className = 'text-2xs text-amber-400 font-bold mt-1';
-        authErrorMsg.classList.remove('hidden');
-      }
-      organizerPasscodeInput.style.borderColor = '#f59e0b';
-      setTimeout(() => {
-        if (organizerPasscodeInput) organizerPasscodeInput.style.borderColor = '';
-      }, 1500);
-      try { organizerPasscodeInput.focus(); } catch (_) {}
-      return;
-    }
-
-    // Validate against authorized passcodes
-    if (VALID_ORGANIZER_CODES.includes(entered)) {
-      isUnlockInProgress = true;
-      isOrganizerAuthorized = true;
-
-      // 1. Immediately dismiss modal
-      if (authErrorMsg) {
-        authErrorMsg.classList.add('hidden');
-        authErrorMsg.textContent = '';
-      }
-      if (modalOrganizerAuth) {
-        modalOrganizerAuth.classList.add('hidden');
-        modalOrganizerAuth.classList.remove('active');
-      }
+    isOrganizerAuthorized = true;
+    if (authErrorMsg) authErrorMsg.classList.add('hidden');
+    if (modalOrganizerAuth) modalOrganizerAuth.classList.add('hidden');
+    if (organizerPasscodeInput) {
       organizerPasscodeInput.value = '';
       organizerPasscodeInput.style.borderColor = '';
-
-      // 2. Seamlessly switch to Organizer Command Center
-      switchToOrganizerView();
-
-      // 3. User feedback
-      showTicker('🔓 Organizer Command Center Unlocked. Welcome, Coordinator.');
-      if (alerts && typeof alerts.playChirp === 'function') {
-        alerts.playChirp(880, 0.12);
-      }
-
-      setTimeout(() => {
-        isUnlockInProgress = false;
-      }, 300);
-    } else {
-      // Clean non-blocking error display for invalid code
-      if (authErrorMsg) {
-        authErrorMsg.textContent = '❌ Invalid passcode. Enter 7700 or EVENT2026.';
-        authErrorMsg.className = 'text-2xs text-rose-400 font-bold mt-1';
-        authErrorMsg.classList.remove('hidden');
-      }
-      organizerPasscodeInput.style.borderColor = '#f43f5e';
-      setTimeout(() => {
-        if (organizerPasscodeInput) organizerPasscodeInput.style.borderColor = '';
-      }, 1500);
-      try { organizerPasscodeInput.focus(); } catch (_) {}
     }
+    switchToOrganizerView();
+    showTicker('🔓 Organizer Command Center Unlocked. Welcome, Coordinator.');
   }
 
-  // Submit button listener
   if (btnSubmitOrganizerAuth) {
-    btnSubmitOrganizerAuth.addEventListener('click', (e) => {
-      e.preventDefault();
-      validateAndUnlockOrganizer();
-    });
+    btnSubmitOrganizerAuth.addEventListener('click', validateAndUnlockOrganizer);
   }
 
-  // Input listeners
   if (organizerPasscodeInput) {
     organizerPasscodeInput.addEventListener('input', () => {
       if (authErrorMsg) authErrorMsg.classList.add('hidden');
@@ -1227,13 +1162,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Quick Unlock Buttons (Instant 1-click unlock without typing)
+  // Demo Quick-Fill Buttons (Auto-fill and 1-click instant unlock)
   const btnFillPin = document.getElementById('btnQuickFillPin');
   if (btnFillPin) {
     btnFillPin.addEventListener('click', (e) => {
       e.preventDefault();
-      e.stopPropagation();
-      if (organizerPasscodeInput) organizerPasscodeInput.value = 'EVENT2026';
+      organizerPasscodeInput.value = 'EVENT2026';
       if (authErrorMsg) authErrorMsg.classList.add('hidden');
       validateAndUnlockOrganizer();
     });
@@ -1243,20 +1177,17 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnFillNum) {
     btnFillNum.addEventListener('click', (e) => {
       e.preventDefault();
-      e.stopPropagation();
-      if (organizerPasscodeInput) organizerPasscodeInput.value = '7700';
+      organizerPasscodeInput.value = '7700';
       if (authErrorMsg) authErrorMsg.classList.add('hidden');
       validateAndUnlockOrganizer();
     });
   }
 
-  // Lock Console
+  // Exit Console
   if (btnLockOrganizer) {
-    btnLockOrganizer.addEventListener('click', (e) => {
-      e.preventDefault();
-      isOrganizerAuthorized = false;
+    btnLockOrganizer.addEventListener('click', () => {
       switchView('home');
-      showTicker('🔒 Organizer Console Locked. Returned to Home.');
+      showTicker('🏠 Returned to Home from Organizer Console.');
     });
   }
 
